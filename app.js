@@ -512,8 +512,9 @@
         if (!vak || $('detailInhoud').dataset.id !== d.id) return;
         if (!fotos.length) { vak.innerHTML = '<span class="klein">Geen foto’s</span>'; return; }
         vak.innerHTML = fotos.map(function (f) {
+          // Zonder voorbeeld: een knop die pas bij tikken het origineel laadt.
           return '<button data-actie="foto" data-naam="' + esc(f.naam) + '" aria-label="' + esc(f.naam) + ' groot bekijken">' +
-            '<img src="' + esc(f.src) + '" alt=""></button>';
+            (f.src ? '<img src="' + esc(f.src) + '" alt="">' : '<span class="foto-knop">Bekijk</span>') + '</button>';
         }).join('');
       };
       if (fotoGeheugen[d.id]) { zetFotos(fotoGeheugen[d.id]); return; }
@@ -563,8 +564,9 @@
   function toonFoto(src) {
     var lb = document.createElement('div');
     lb.id = 'lightbox';
-    lb.innerHTML = '<img alt="ID-foto">';
-    lb.firstChild.src = src;
+    lb.innerHTML = '<img alt="ID-foto"><p class="klein">Foto laden…</p>';
+    if (src) lb.firstChild.src = src;
+    else lb.firstChild.hidden = true;
     lb.addEventListener('click', function () { lb.remove(); });
     document.body.appendChild(lb);
   }
@@ -593,10 +595,13 @@
       return;
     }
     if (actie === 'foto') {
-      toonFoto(el.querySelector('img').src); // eerst de miniatuur, dan scherp
+      var mini = el.querySelector('img');
+      toonFoto(mini ? mini.src : ''); // eerst de miniatuur (als die er is), dan scherp
       roep('fotoGroot', [id, el.dataset.naam], function (src) {
         var img = document.querySelector('#lightbox img');
-        if (img) img.src = src;
+        if (img) { img.src = src; img.hidden = false; }
+        var tekst = document.querySelector('#lightbox p');
+        if (tekst) tekst.remove();
       });
       return;
     }

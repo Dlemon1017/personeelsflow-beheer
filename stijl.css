@@ -130,3 +130,6 @@ dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; overflow-
 .laad-regel.kort { width: 60%; }
 @keyframes puls { 50% { opacity: .45; } }
 @media (prefers-reduced-motion: reduce) { .laad-regel { animation: none; } }
+.miniaturen .foto-knop { display: flex; align-items: center; justify-content: center; width: 72px; height: 48px;
+  font-size: 12px; color: var(--zacht); }
+#lightbox p { color: #fff; position: absolute; bottom: 24px; left: 0; right: 0; text-align: center; }
