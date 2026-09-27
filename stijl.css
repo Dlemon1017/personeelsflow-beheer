@@ -145,3 +145,12 @@ dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; overflow-
 .sides-item .wie { flex: 1; min-width: 0; }
 .sides-bedrag { margin: 4px 0 2px; }
 .klein-knop { width: auto; padding: 10px 14px; }
+
+/* Fase 5b */
+.b-Terug-bij-medewerker { background: var(--geel-bg); color: var(--geel); }
+.vink-regel { display: flex; align-items: center; gap: 10px; font-weight: 500; margin: 8px 0; }
+.vink-regel input { -webkit-appearance: checkbox; appearance: auto; accent-color: #fff; width: 20px; height: 20px; min-height: 0; padding: 0; margin: 0; flex: none; }
+.dialoog textarea { width: 100%; font: inherit; color: var(--tekst); background: var(--bg); border: 1px solid var(--lijn);
+  border-radius: 10px; padding: 10px; margin-bottom: 8px; }
+.dialoog.groot { max-height: calc(100vh - 32px); overflow-y: auto; }
+.dialoog input { margin-bottom: 2px; }

@@ -302,8 +302,29 @@
     }, herstel);
   });
 
+  function toonBanvo(items) {
+    $('banvo').hidden = !(items && items.length);
+    if (!items || !items.length) return;
+    $('banvoItems').innerHTML = items.map(function (i) {
+      return '<div class="sides-item"><div class="wie"><div class="naam">' + esc(i.naam) + ' · ' + esc(i.label) + '</div>' +
+        '<div class="sides-bedrag">' + esc(i.oud || '–') + ' → <strong>' + esc(i.nieuw || '–') + '</strong></div>' +
+        '<div class="klein">' + esc(i.op) + ' · ' + esc(i.door) + (i.opmerking ? ' · ' + esc(i.opmerking) : '') + '</div></div>' +
+        '<button class="knop licht klein-knop" data-banvo-rij="' + esc(i.rij) + '">Doorgegeven</button></div>';
+    }).join('');
+  }
+
+  $('banvoItems').addEventListener('click', function (e) {
+    var knop = e.target.closest('[data-banvo-rij]');
+    if (!knop) return;
+    var herstel = bezig(knop, 'Bezig…');
+    roep('banvoDoorgegeven', [Number(knop.dataset.banvoRij)], function (o) {
+      bewaarLijst(o); toonLijst(o); toon('Afgevinkt als doorgegeven aan Banvo.');
+    }, herstel);
+  });
+
   function toonLijst(o) {
     laatsteLijst = o.medewerkers;
+    if (o.banvo) toonBanvo(o.banvo);
     if (o.sidesBijwerken) toonSidesBijwerken(o.sidesBijwerken);
     (function () {
       var actief = o.medewerkers.filter(function (m) { return m.status !== 'Geannuleerd'; }).length;
@@ -527,7 +548,7 @@
     if (!alOnthouden) onthoudDetail(d, true); // aangeroepen na een actie
     var acties = '';
     if (d.herinnering) acties += '<button class="knop licht" data-actie="herinnering">Herinnering nu sturen (' +
-      (d.herinnering === 'formulier' ? 'formulier' : 'contract') + ')</button>';
+      ({ formulier: 'formulier', terug: 'correctie', contract: 'contract' }[d.herinnering] || d.herinnering) + ')</button>';
     if (d.kanOpnieuwUitnodigen) acties += '<button class="knop licht" data-actie="opnieuw">Uitnodiging opnieuw sturen</button>';
     if (d.loonheffingUrl) acties += pdfKnop('loonheffing', 'Loonheffingsverklaring');
     else if (d.loonheffingBezig) acties += '<div class="klein midden">Loonheffingsverklaring wordt gemaakt (binnen 5 minuten).</div>';
@@ -535,12 +556,19 @@
     if (d.mapUrl) acties += '<a class="knop licht link" target="_blank" rel="noopener" href="' + esc(d.mapUrl) + '">Drive-map openen</a>';
     if (d.kanContractOpnieuw) acties += '<button class="knop licht" data-actie="contract-opnieuw" data-gezien="' +
       esc(d.contractGemaaktOp) + '">Contract opnieuw maken</button>';
+    if (d.kanTerugsturen) acties += '<button class="knop licht" data-actie="terugsturen">Terugsturen naar medewerker</button>';
+    if (d.correctie) acties += '<button class="knop licht" data-actie="corrigeer">Gegevens corrigeren</button>';
+    if (d.wijzigingslink) {
+      acties += '<button class="knop licht" data-actie="wijzigingslink">Wijzigingslink ' + (d.wijzigingslink.actief ? 'opnieuw ' : '') + 'sturen</button>';
+      if (d.wijzigingslink.actief) acties += '<button class="knop licht" data-actie="wijzigingslink-in">Wijzigingslink intrekken</button>';
+    }
     if (d.kanAnnuleren) acties += '<button class="knop gevaar" data-actie="annuleer">Annuleren</button>';
 
     $('detailInhoud').innerHTML =
       '<button class="terug" data-actie="terug">‹ Terug</button>' +
       '<div class="kop-detail"><h1>' + esc(d.naam) + '</h1>' + badge(d.status, d.statusLabel) + '</div>' +
       (d.controle ? controleHtml(d.controle) : '') +
+      (d.terug ? '<div class="test mt12">↩ Teruggestuurd (' + esc(d.terug.stappen.join(', ')) + '): ' + esc(d.terug.reden) + '</div>' : '') +
       (d.nmbrs ? nmbrsKaartHtml(d) : '') + (d.sides ? sidesKaartHtml(d) : '') +
       (d.waarschuwingen && !d.controle ? '<div class="test mt12">⚠ ' + esc(d.waarschuwingen) + '</div>' : '') +
       (d.formulier.length ? '<div class="kaart"><h2>Formulier</h2>' + (d.vergelijk ? vergelijkHtml(d.vergelijk) : '') +
@@ -605,6 +633,81 @@
     });
   }
 
+  /** Venster "Terugsturen": stappen aanvinken + korte reden. Geeft Promise<{stappen, reden}|null>. */
+  function terugsturenDialoog() {
+    return new Promise(function (klaar) {
+      var namen = ['Over jou', 'Adres en contact', 'Bank en ID', 'Belasting en handtekening'];
+      var achter = document.createElement('div');
+      achter.className = 'dialoog-achter';
+      achter.innerHTML = '<div class="dialoog" role="dialog" aria-modal="true" aria-labelledby="tTitel">' +
+        '<h2 id="tTitel">Terugsturen naar medewerker</h2><p>Welke stap(pen) moet de medewerker aanpassen? ' +
+        'Stap 4 (handtekening) gaat altijd mee.</p>' + namen.map(function (n, i) {
+          return '<label class="vink-regel"><input type="checkbox" value="' + i + '"' + (i === 3 ? ' checked disabled' : '') + '> ' + n + '</label>';
+        }).join('') + '<label for="tReden">Reden (komt in de mail)</label><textarea id="tReden" rows="3" maxlength="300"></textarea>' +
+        '<div class="fout" id="tFout"></div><div class="dialoog-knoppen"><button class="knop licht" data-keuze="nee">Terug</button>' +
+        '<button class="knop" data-keuze="ja">Terugsturen</button></div></div>';
+      function sluit(uitkomst) { achter.remove(); klaar(uitkomst); }
+      achter.addEventListener('click', function (e) {
+        if (e.target === achter) return sluit(null);
+        var k = e.target.closest('[data-keuze]');
+        if (!k) return;
+        if (k.dataset.keuze === 'nee') return sluit(null);
+        var stappen = Array.prototype.filter.call(achter.querySelectorAll('input[type=checkbox]'), function (c) { return c.checked; })
+          .map(function (c) { return Number(c.value); });
+        var reden = achter.querySelector('#tReden').value.trim();
+        if (!reden) { achter.querySelector('#tFout').textContent = 'Vul een korte reden in.'; return; }
+        sluit({ stappen: stappen, reden: reden });
+      });
+      document.body.appendChild(achter);
+      achter.querySelector('input').focus();
+    });
+  }
+
+  var CORRECTIE_LABELS = { roepnaam: 'Roepnaam', voornamen: 'Voornamen', tussenvoegsel: 'Tussenvoegsel', achternaam: 'Achternaam',
+    straat: 'Straat', huisnummer: 'Huisnummer', toevoeging: 'Toevoeging', postcode: 'Postcode', woonplaats: 'Woonplaats',
+    mobiel: 'Mobiel', noodcontact_naam: 'Noodcontact', noodcontact_relatie: 'Relatie noodcontact', noodcontact_telefoon: 'Telefoon noodcontact' };
+
+  /** Venster "Gegevens corrigeren": alleen naam, adres, telefoon en noodcontact (niet BSN, IBAN, loonheffingskorting). */
+  function corrigeerDialoog(id, huidig) {
+    var achter = document.createElement('div');
+    achter.className = 'dialoog-achter';
+    achter.innerHTML = '<div class="dialoog groot" role="dialog" aria-modal="true" aria-labelledby="cTitel">' +
+      '<h2 id="cTitel">Gegevens corrigeren</h2><p>BSN, IBAN en loonheffingskorting kan alleen de medewerker wijzigen.</p>' +
+      Object.keys(CORRECTIE_LABELS).map(function (v) {
+        return '<label for="c-' + v + '">' + CORRECTIE_LABELS[v] + '</label><input id="c-' + v + '" data-veld="' + v + '">' +
+          '<div class="fout" data-cfout="' + v + '"></div>';
+      }).join('') + '<div class="dialoog-knoppen"><button class="knop licht" data-keuze="nee">Annuleren</button>' +
+      '<button class="knop" data-keuze="ja">Opslaan</button></div></div>';
+    Object.keys(CORRECTIE_LABELS).forEach(function (v) { achter.querySelector('#c-' + v).value = huidig[v] || ''; });
+    achter.addEventListener('click', function (e) {
+      if (e.target === achter) return achter.remove();
+      var k = e.target.closest('[data-keuze]');
+      if (!k) return;
+      if (k.dataset.keuze === 'nee') return achter.remove();
+      var velden = {};
+      Object.keys(CORRECTIE_LABELS).forEach(function (v) {
+        var w = achter.querySelector('#c-' + v).value;
+        if (w !== (huidig[v] || '')) velden[v] = w;
+      });
+      if (!Object.keys(velden).length) { achter.remove(); return; }
+      var herstel = bezig(k, 'Opslaan…');
+      roep('corrigeer', [id, velden, huidig], function (r) {
+        if (r.fouten) {
+          herstel();
+          Array.prototype.forEach.call(achter.querySelectorAll('[data-cfout]'), function (el) { el.textContent = r.fouten[el.dataset.cfout] || ''; });
+          return;
+        }
+        achter.remove();
+        if (r.id) { toonDetail(r); return; } // "Intussen gewijzigd": actuele gegevens, melding komt via roep()
+        if (r.detail) toonDetail(r.detail);
+        toon(r.niets ? 'Er was niets gewijzigd.' : 'Gegevens gecorrigeerd en vastgelegd in tab Wijzigingen.');
+        laad(true);
+      }, function () { herstel(); achter.remove(); });
+    });
+    document.body.appendChild(achter);
+    achter.querySelector('input').focus();
+  }
+
   function toonFoto(src) {
     var lb = document.createElement('div');
     lb.id = 'lightbox';
@@ -634,6 +737,35 @@
       roep('verwerkt', [id, welk], function (d) {
         toonDetail(d); toon((welk === 'nmbrs' ? 'Nmbrs' : 'Sides') + ' verwerkt.' + (d.status === 'Klaar' ? ' Status: Klaar.' : '')); laad(true);
       }, herstelV);
+      return;
+    }
+    if (actie === 'terugsturen') {
+      terugsturenDialoog().then(function (keuze) {
+        if (!keuze) return;
+        var herstelT = bezig(el);
+        roep('terugsturen', [id, keuze.stappen, keuze.reden], function (d) {
+          toonDetail(d); toon('Teruggestuurd; de medewerker krijgt een mail.'); laad(true);
+        }, herstelT);
+      });
+      return;
+    }
+    if (actie === 'corrigeer') {
+      var huidig = (detailGeheugen[id] || {}).d;
+      if (huidig && huidig.correctie) corrigeerDialoog(id, huidig.correctie);
+      return;
+    }
+    if (actie === 'wijzigingslink') {
+      var herstelW = bezig(el);
+      roep('wijzigingslink', [id], function (d) { toonDetail(d); toon('Wijzigingslink verstuurd.'); }, herstelW);
+      return;
+    }
+    if (actie === 'wijzigingslink-in') {
+      bevestig('Wijzigingslink intrekken?', 'De link in de mails werkt daarna niet meer. Je kunt later een nieuwe sturen.',
+        'Intrekken', true).then(function (ja) {
+        if (!ja) return;
+        var herstelI = bezig(el);
+        roep('wijzigingslinkIntrekken', [id], function (d) { toonDetail(d); toon('Wijzigingslink ingetrokken.'); }, herstelI);
+      });
       return;
     }
     if (actie === 'herinnering') {
