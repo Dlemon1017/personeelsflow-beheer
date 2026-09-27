@@ -281,8 +281,30 @@
     }, function () { planVerversen(); }, !!stil);
   }
 
+  function toonSidesBijwerken(items) {
+    $('sidesBijwerken').hidden = !(items && items.length);
+    if (!items || !items.length) return;
+    $('sidesItems').innerHTML = items.map(function (i) {
+      return '<div class="sides-item"><div class="wie"><div class="naam">' + esc(i.naam) + '</div>' +
+        '<div class="klein">' + esc(i.reden) + ' · vanaf ' + esc(i.vanaf) + '</div>' +
+        '<div class="sides-bedrag">Sides € ' + esc(i.oudSides) + ' → <strong>€ ' + esc(i.nieuwSides) + '</strong></div>' +
+        '<div class="klein">Nmbrs: ' + esc(i.nieuweTabel) + ', basisuurloon € ' + esc(i.nieuwBasis) + '</div></div>' +
+        '<button class="knop licht klein-knop" data-sides-id="' + esc(i.id) + '">Bijgewerkt</button></div>';
+    }).join('');
+  }
+
+  $('sidesItems').addEventListener('click', function (e) {
+    var knop = e.target.closest('[data-sides-id]');
+    if (!knop) return;
+    var herstel = bezig(knop, 'Bezig…');
+    roep('sidesBijgewerkt', [knop.dataset.sidesId], function (o) {
+      bewaarLijst(o); toonLijst(o); toon('Sides bijgewerkt en vastgelegd.');
+    }, herstel);
+  });
+
   function toonLijst(o) {
     laatsteLijst = o.medewerkers;
+    if (o.sidesBijwerken) toonSidesBijwerken(o.sidesBijwerken);
     (function () {
       var actief = o.medewerkers.filter(function (m) { return m.status !== 'Geannuleerd'; }).length;
       $('telling').textContent = actief === 1 ? '1 medewerker in de flow' : actief + ' medewerkers in de flow';
@@ -482,9 +504,30 @@
       }).join('') + '</div></div>';
   }
 
+  function kopieerRij(label, waarde) {
+    return '<div><dt>' + esc(label) + '</dt><dd>' + esc(waarde || '–') +
+      (waarde ? ' <button class="kopieer" data-actie="kopieer" data-waarde="' + esc(waarde) + '" aria-label="' + esc(label) +
+        ' kopiëren">Kopieer</button>' : '') + '</dd></div>';
+  }
+
+  function nmbrsKaartHtml(d) {
+    return '<div class="kaart werkkaart"><h2>Nmbrs</h2>' + d.nmbrs.map(function (g) {
+      return '<h3 class="groep">' + esc(g.titel) + '</h3><dl>' + g.velden.map(function (v) { return kopieerRij(v[0], v[1]); }).join('') + '</dl>';
+    }).join('') + (d.nmbrsVerwerkt ? '<p class="klaar-tekst">✓ Nmbrs verwerkt</p>'
+      : '<button class="knop mt12" data-actie="verwerkt" data-welk="nmbrs">Nmbrs verwerkt</button>') + '</div>';
+  }
+
+  function sidesKaartHtml(d) {
+    return '<div class="kaart werkkaart"><h2>Sides</h2><dl>' + d.sides.map(function (v) { return kopieerRij(v[0], v[1]); }).join('') +
+      '</dl>' + (d.sidesVerwerkt ? '<p class="klaar-tekst">✓ Sides verwerkt</p>'
+      : '<button class="knop mt12" data-actie="verwerkt" data-welk="sides">Sides verwerkt</button>') + '</div>';
+  }
+
   function toonDetail(d, alOnthouden) {
     if (!alOnthouden) onthoudDetail(d, true); // aangeroepen na een actie
     var acties = '';
+    if (d.herinnering) acties += '<button class="knop licht" data-actie="herinnering">Herinnering nu sturen (' +
+      (d.herinnering === 'formulier' ? 'formulier' : 'contract') + ')</button>';
     if (d.kanOpnieuwUitnodigen) acties += '<button class="knop licht" data-actie="opnieuw">Uitnodiging opnieuw sturen</button>';
     if (d.loonheffingUrl) acties += pdfKnop('loonheffing', 'Loonheffingsverklaring');
     else if (d.loonheffingBezig) acties += '<div class="klein midden">Loonheffingsverklaring wordt gemaakt (binnen 5 minuten).</div>';
@@ -498,6 +541,7 @@
       '<button class="terug" data-actie="terug">‹ Terug</button>' +
       '<div class="kop-detail"><h1>' + esc(d.naam) + '</h1>' + badge(d.status, d.statusLabel) + '</div>' +
       (d.controle ? controleHtml(d.controle) : '') +
+      (d.nmbrs ? nmbrsKaartHtml(d) : '') + (d.sides ? sidesKaartHtml(d) : '') +
       (d.waarschuwingen && !d.controle ? '<div class="test mt12">⚠ ' + esc(d.waarschuwingen) + '</div>' : '') +
       (d.formulier.length ? '<div class="kaart"><h2>Formulier</h2>' + (d.vergelijk ? vergelijkHtml(d.vergelijk) : '') +
         lijstHtml(d.formulier) + '</div>' : '') +
@@ -577,6 +621,26 @@
     var id = $('detailInhoud').dataset.id;
     var actie = el.dataset.actie;
     if (actie === 'terug') return sluitDetail();
+    if (actie === 'kopieer') {
+      var waarde = el.dataset.waarde;
+      (navigator.clipboard ? navigator.clipboard.writeText(waarde) : Promise.reject()).then(function () {
+        toon('Gekopieerd: ' + waarde);
+      }, function () { toon('Kopiëren lukte niet; selecteer de tekst handmatig.', true); });
+      return;
+    }
+    if (actie === 'verwerkt') {
+      var welk = el.dataset.welk;
+      var herstelV = bezig(el);
+      roep('verwerkt', [id, welk], function (d) {
+        toonDetail(d); toon((welk === 'nmbrs' ? 'Nmbrs' : 'Sides') + ' verwerkt.' + (d.status === 'Klaar' ? ' Status: Klaar.' : '')); laad(true);
+      }, herstelV);
+      return;
+    }
+    if (actie === 'herinnering') {
+      var herstelH = bezig(el);
+      roep('herinnering', [id], function (d) { toonDetail(d); toon('Herinnering verstuurd.'); laad(true); }, herstelH);
+      return;
+    }
     if (actie === 'pdf') {
       var vak = el.parentNode;
       var label = el.textContent;

@@ -118,7 +118,6 @@ dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; overflow-
   object-fit: cover; clip-path: circle(50% at 50% 50%); }
 
 .b-Contract-verstuurd { background: var(--paars-bg); color: var(--paars); }
-.b-Getekend { background: var(--groen-bg); color: var(--groen); }
 .knop.bezig { display: inline-flex; align-items: center; justify-content: center; gap: 10px; }
 .knop.bezig::before { content: ""; width: 16px; height: 16px; border-radius: 50%; border: 2px solid currentColor;
   border-right-color: transparent; animation: draai .7s linear infinite; }
@@ -133,3 +132,16 @@ dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; overflow-
 .miniaturen .foto-knop { display: flex; align-items: center; justify-content: center; width: 72px; height: 48px;
   font-size: 12px; color: var(--zacht); }
 #lightbox p { color: #fff; position: absolute; bottom: 24px; left: 0; right: 0; text-align: center; }
+
+/* Fase 5: Nmbrs-/Sides-kaart en Sides bijwerken */
+.werkkaart h3.groep { font-size: 13px; color: var(--zacht); text-transform: uppercase; letter-spacing: .05em; margin: 16px 0 6px; }
+.werkkaart h3.groep:first-of-type { margin-top: 0; }
+.werkkaart dd { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+.kopieer { flex: none; font: inherit; font-size: 12px; font-weight: 600; padding: 4px 8px; border-radius: 8px;
+  border: 1px solid var(--lijn); background: var(--bg); color: var(--tekst); cursor: pointer; }
+.klaar-tekst { color: var(--groen); font-weight: 600; margin: 12px 0 0; }
+.sides-item { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-top: 1px solid var(--lijn); }
+.sides-item:first-child { border-top: 0; }
+.sides-item .wie { flex: 1; min-width: 0; }
+.sides-bedrag { margin: 4px 0 2px; }
+.klein-knop { width: auto; padding: 10px 14px; }
