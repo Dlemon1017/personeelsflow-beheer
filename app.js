@@ -53,11 +53,39 @@
   }
 
   /** Zelfde vorm als vroeger google.script.run: roep(functie, args, ok, fout). */
+  /**
+   * Alleen-lezen: komt er na 6 s geen antwoord, dan gaat er een tweede, identieke aanroep; de eerste wint.
+   * Vangt de uitschieters van Google Apps Script op. Acties die iets veranderen worden nooit dubbel verstuurd.
+   */
+  var ALLEEN_LEZEN = ['overzicht', 'detail', 'miniaturen', 'voorbeeld', 'bestand', 'fotoGroot'];
+
+  function apiSnel(verzoek, dubbelNa, max) {
+    return new Promise(function (ok, fout) {
+      var klaar = false, gestart = 0, mislukt = 0;
+      function poging() {
+        gestart++;
+        api(verzoek).then(function (r) {
+          if (klaar) return;
+          klaar = true; clearTimeout(t1); clearTimeout(t2); ok(r);
+        }, function (e) {
+          mislukt++;
+          if (klaar) return;
+          if (gestart < 2) { poging(); return; }
+          if (mislukt >= gestart) { klaar = true; clearTimeout(t2); fout(e); }
+        });
+      }
+      var t1 = setTimeout(function () { if (!klaar && gestart < 2) poging(); }, dubbelNa);
+      var t2 = setTimeout(function () { if (!klaar) { klaar = true; fout(new Error('Het duurt te lang. Probeer het opnieuw.')); } }, max);
+      poging();
+    });
+  }
+
   /** stil: geen foutmelding tonen (voor automatisch verversen op de achtergrond). */
   function roep(fn, args, ok, fout, stil) {
     var s = sessieInGeheugen;
     if (!s) { toonLogin(); return; }
-    api({ actie: 'beheer', sessie: s.sessie, functie: fn, args: args || [] }).then(function (r) {
+    var verzoek = { actie: 'beheer', sessie: s.sessie, functie: fn, args: args || [] };
+    (ALLEEN_LEZEN.indexOf(fn) !== -1 ? apiSnel(verzoek, 6000, 45000) : api(verzoek)).then(function (r) {
       if (r.status === 'uitgelogd') { wisSessie(); toonLogin('Je sessie is verlopen of ingetrokken. Log opnieuw in.'); return; }
       if (r.status !== 'ok') throw new Error(r.melding || 'Er ging iets mis.');
       ok(r.data);
