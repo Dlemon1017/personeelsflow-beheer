@@ -37,6 +37,15 @@
   var sessieInGeheugen = leesSessie();
 
   /** POST naar de Apps Script-API zonder cookies (werkt ook met meerdere Google-accounts). */
+  var STORING = 'De server van Google reageert even niet. Probeer het zo opnieuw.';
+
+  /** Technische fout (netwerk, foutpagina van Google): nette Nederlandse melding, en herkenbaar voor opnieuw proberen. */
+  function storing() {
+    var e = new Error(STORING);
+    e.technisch = true;
+    return e;
+  }
+
   function api(verzoek) {
     return fetch(window.PF_CONFIG.api, {
       method: 'POST',
@@ -45,10 +54,13 @@
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: JSON.stringify(verzoek)
     }).then(function (r) {
-      if (!r.ok) throw new Error('HTTP ' + r.status);
+      // Google geeft af en toe een 404-foutpagina ("Kan het bestand niet openen") i.p.v. ons antwoord.
+      if (!r.ok) throw storing();
       return r.text();
+    }, function () {
+      throw storing();
     }).then(function (t) {
-      try { return JSON.parse(t); } catch (e) { throw new Error('Geen geldig antwoord van de server. Probeer het opnieuw.'); }
+      try { return JSON.parse(t); } catch (e) { throw storing(); }
     });
   }
 
@@ -58,7 +70,15 @@
    * Vangt de uitschieters van Google Apps Script op. Acties die iets veranderen worden nooit dubbel verstuurd.
    */
   var ALLEEN_LEZEN = ['overzicht', 'detail', 'miniaturen', 'voorbeeld', 'bestand', 'fotoGroot'];
+  // Achtergrondaanroepen: mislukken mag nooit een rode balk geven (de gegevens staan al op het scherm).
+  var ACHTERGROND = ['miniaturen', 'voorbeeld'];
 
+  var MAX_POGINGEN = 3;
+
+  /**
+   * Veilig te herhalen aanroepen: na `dubbelNa` ms zonder antwoord een extra poging, en na een foutpagina van Google
+   * direct opnieuw (maximaal 3 pogingen). De eerste die antwoordt wint; na `max` ms: storing.
+   */
   function apiSnel(verzoek, dubbelNa, max) {
     return new Promise(function (ok, fout) {
       var klaar = false, gestart = 0, mislukt = 0;
@@ -70,12 +90,12 @@
         }, function (e) {
           mislukt++;
           if (klaar) return;
-          if (gestart < 2) { poging(); return; }
+          if (gestart < MAX_POGINGEN) { setTimeout(function () { if (!klaar) poging(); }, 400); return; }
           if (mislukt >= gestart) { klaar = true; clearTimeout(t2); fout(e); }
         });
       }
-      var t1 = setTimeout(function () { if (!klaar && gestart < 2) poging(); }, dubbelNa);
-      var t2 = setTimeout(function () { if (!klaar) { klaar = true; fout(new Error('Het duurt te lang. Probeer het opnieuw.')); } }, max);
+      var t1 = setTimeout(function () { if (!klaar && gestart < MAX_POGINGEN) poging(); }, dubbelNa);
+      var t2 = setTimeout(function () { if (!klaar) { klaar = true; fout(storing()); } }, max);
       poging();
     });
   }
@@ -85,6 +105,7 @@
     var s = sessieInGeheugen;
     if (!s) { toonLogin(); return; }
     var verzoek = { actie: 'beheer', sessie: s.sessie, functie: fn, args: args || [] };
+    stil = stil || ACHTERGROND.indexOf(fn) !== -1;
     (ALLEEN_LEZEN.indexOf(fn) !== -1 ? apiSnel(verzoek, 6000, 45000) : api(verzoek)).then(function (r) {
       if (r.status === 'uitgelogd') { wisSessie(); toonLogin('Je sessie is verlopen of ingetrokken. Log opnieuw in.'); return; }
       if (r.status !== 'ok') throw new Error(r.melding || 'Er ging iets mis.');
@@ -153,8 +174,10 @@
   $('loginCode').addEventListener('submit', function (e) {
     e.preventDefault();
     $('l-code-fout').textContent = '';
-    var herstel = bezig($('l-inloggen'), 'Inloggen…');
-    api({ actie: 'login_code', email: $('l-email').value.trim(), code: $('l-code').value, apparaat: navigator.userAgent })
+    var herstel = bezig($('l-inloggen'), 'Bezig met inloggen…');
+    // Mag veilig herhaald worden: de server geeft bij hetzelfde verzoek binnen 2 minuten dezelfde sessie terug.
+    apiSnel({ actie: 'login_code', email: $('l-email').value.trim(), code: $('l-code').value, apparaat: navigator.userAgent },
+      6000, 45000)
       .then(function (r) {
         herstel();
         if (r.status !== 'ok') { $('l-code-fout').textContent = (r.fouten && r.fouten.code) || 'Inloggen lukte niet.'; return; }
@@ -168,7 +191,8 @@
   $('uitloggen').addEventListener('click', function () {
     var s = sessieInGeheugen;
     wisSessie();
-    wisLijstCache();
+    $('lijst').innerHTML = ''; // niet zichtbaar voor een volgende gebruiker op dit apparaat
+    // De lijstcache (alleen naam/status/startdatum, per e-mailadres) blijft staan: na opnieuw inloggen staat de lijst er meteen.
     if (s) api({ actie: 'uitloggen', sessie: s.sessie }).catch(function () { /* lokaal al uitgelogd */ });
     toonLogin('Je bent uitgelogd.');
   });
@@ -228,9 +252,6 @@
       return null;
     }
   }
-  function wisLijstCache() {
-    try { localStorage.removeItem(LIJST_SLEUTEL); } catch (e) { /* niets */ }
-  }
 
   var ververstimer = null;
   function planVerversen() {
@@ -250,6 +271,8 @@
   function laad(stil) {
     var cache = lijstUitCache();
     if (cache && !stil && !$('lijst').innerHTML) toonLijst(cache);
+    // Staat er al een lijst (uit de cache of eerder geladen)? Dan is verversen stil: geen rode balk bij een storing.
+    stil = stil || !!$('lijst').innerHTML;
     roep('overzicht', [], function (o) {
       bewaarLijst(o);
       toonLijst(o);
@@ -443,10 +466,14 @@
       roep('miniaturen', [d.id], function (fotos) {
         var vak = document.querySelector('#detailInhoud .miniaturen');
         if (!vak || $('detailInhoud').dataset.id !== d.id) return;
+        if (!fotos.length) { vak.innerHTML = '<span class="klein">Geen foto’s</span>'; return; }
         vak.innerHTML = fotos.map(function (f) {
           return '<button data-actie="foto" data-naam="' + esc(f.naam) + '" aria-label="' + esc(f.naam) + ' groot bekijken">' +
             '<img src="' + esc(f.src) + '" alt=""></button>';
         }).join('');
+      }, function () {
+        var vak = document.querySelector('#detailInhoud .miniaturen');
+        if (vak && $('detailInhoud').dataset.id === d.id) vak.innerHTML = '<span class="klein">Foto’s niet geladen</span>';
       });
     }
   }
