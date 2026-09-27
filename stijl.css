@@ -1,18 +1,11 @@
 :root {
-  --bg: #f6f7f9; --kaart: #ffffff; --tekst: #1f2328; --zacht: #656d76; --lijn: #e6e8eb;
-  --knop: #1f2328; --knop-tekst: #ffffff; --focus: #2f6feb;
-  --blauw-bg: #e8f0fe; --blauw: #1a56c4; --geel-bg: #fff4d6; --geel: #8a5a00;
-  --paars-bg: #f1e9fd; --paars: #6b3fb8; --groen-bg: #e3f5e8; --groen: #1e7a3c;
-  --grijs-bg: #eef0f2; --grijs: #656d76; --rood: #c4302b; --rood-bg: #fdecea;
-}
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #0f1115; --kaart: #181b21; --tekst: #e8eaed; --zacht: #9aa1ab; --lijn: #2a2f37;
-    --knop: #e8eaed; --knop-tekst: #0f1115; --focus: #6ea0ff;
-    --blauw-bg: #1b2a44; --blauw: #8fb4ff; --geel-bg: #3a2e12; --geel: #f0c665;
-    --paars-bg: #2c2240; --paars: #c3a6f5; --groen-bg: #16301f; --groen: #7fd49a;
-    --grijs-bg: #23272e; --grijs: #9aa1ab; --rood: #ff7b72; --rood-bg: #3a1d1b;
-  }
+  /* Altijd donker, ongeacht de instelling van het apparaat (huisstijl: zwart logo). */
+  color-scheme: dark;
+  --bg: #0d0d0d; --kaart: #1a1a1a; --tekst: #f2f2f2; --zacht: #a8a8a8; --lijn: #333333;
+  --knop: #f2f2f2; --knop-tekst: #0d0d0d; --focus: #7aa7ff;
+  --blauw-bg: #1b2a44; --blauw: #9dbdff; --geel-bg: #3a2e12; --geel: #f0c665;
+  --paars-bg: #2c2240; --paars: #c9adf7; --groen-bg: #16301f; --groen: #7fd49a;
+  --grijs-bg: #262626; --grijs: #a8a8a8; --rood: #ff7b72; --rood-bg: #3a1d1b;
 }
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); color: var(--tekst);
@@ -79,11 +72,11 @@ input:focus, button:focus-visible { outline: 2px solid var(--focus); outline-off
   align-items: flex-end; justify-content: center; padding: 16px; }
 @media (min-width: 600px) { .dialoog-achter { align-items: center; } }
 .dialoog { width: 100%; max-width: 420px; background: var(--kaart); color: var(--tekst); border-radius: 18px;
-  padding: 20px; box-shadow: 0 12px 40px rgba(0,0,0,.25); }
+  padding: 20px; border: 1px solid #4a4a4a; box-shadow: 0 12px 40px rgba(0,0,0,.6); }
 .dialoog h2 { font-size: 18px; margin: 0 0 8px; }
 .dialoog p { margin: 0 0 18px; color: var(--zacht); }
 .dialoog-knoppen { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.knop.rood { background: var(--rood); color: #fff; }
+.knop.rood { background: #d9342b; color: #fff; }
 #lightbox { position: fixed; inset: 0; background: rgba(0,0,0,.88); z-index: 30; display: flex; align-items: center;
   justify-content: center; padding: 16px; }
 #lightbox img { max-width: 100%; max-height: 100%; border-radius: 8px; }
@@ -103,14 +96,14 @@ dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; overflow-
   background: var(--knop); color: var(--knop-tekst); border-radius: 12px; padding: 12px 16px; font-size: 14px;
   opacity: 0; transform: translateY(12px); transition: all .2s; pointer-events: none; z-index: 20; }
 #melding.toon { opacity: 1; transform: none; }
-#melding.fout { background: var(--rood); color: #fff; }
+#melding.fout { background: #d9342b; color: #fff; }
 [hidden] { display: none !important; }
 
 /* Inloggen en kopbalk */
 .kopbalk { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 2px; }
 .gebruiker { font-size: 13px; color: var(--zacht); text-align: right; }
 .tekst-knop { background: none; border: 0; padding: 4px 0; color: var(--tekst); font-weight: 600; font-size: 14px; text-decoration: underline; }
-#login { max-width: 400px; margin: 12vh auto 0; padding: 0 16px; }
+#login { max-width: 400px; margin: 0 auto; padding: calc(28px + env(safe-area-inset-top)) 16px 40px; }
 #login h1 { margin-bottom: 6px; }
 #login p { color: var(--zacht); margin: 0 0 20px; }
 #login .knop { margin-top: 14px; }
@@ -121,3 +114,4 @@ dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; overflow-
 .mt10 { margin-top: 10px; }
 .mt12 { margin-top: 12px; }
 .midden { text-align: center; }
+.logo { display: block; width: 120px; height: 120px; border-radius: 50%; margin: 0 auto 20px; }
