@@ -157,3 +157,7 @@ dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; overflow-
 
 /* Adres opzoeken (PDOK) */
 .adres-melding { font-size: 14px; color: var(--geel, #e0b04a); margin: -4px 0 12px; }
+
+/* Lijst uit de browsercache die ouder is dan 30 s: voorlopig tot de verse lijst er is */
+.lijst.voorlopig { opacity: .45; transition: opacity .2s; }
+.bijwerken { margin-top: 2px; font-style: italic; }

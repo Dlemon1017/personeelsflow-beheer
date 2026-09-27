@@ -109,6 +109,7 @@
     (ALLEEN_LEZEN.indexOf(fn) !== -1 ? apiSnel(verzoek, 6000, 45000) : api(verzoek)).then(function (r) {
       if (r.status === 'uitgelogd') { wisSessie(); toonLogin('Je sessie is verlopen of ingetrokken. Log opnieuw in.'); return; }
       if (r.status !== 'ok') throw new Error(r.melding || 'Er ging iets mis.');
+      if (ALLEEN_LEZEN.indexOf(fn) === -1) naEigenActie();
       ok(r.data);
       if (r.melding) toon(r.melding); // bijv. "Al gedaan door …": actuele status staat er al
     }).catch(function (e) {
@@ -237,7 +238,7 @@
   function bewaarLijst(o) {
     try {
       localStorage.setItem(LIJST_SLEUTEL, JSON.stringify({
-        email: sessieInGeheugen && sessieInGeheugen.email, testmodus: o.testmodus, testEmail: o.testEmail,
+        email: sessieInGeheugen && sessieInGeheugen.email, testmodus: o.testmodus, testEmail: o.testEmail, op: Date.now(),
         medewerkers: o.medewerkers.map(function (m) {
           return { id: m.id, naam: m.naam, startdatum: m.startdatum, status: m.status, statusLabel: m.statusLabel };
         })
@@ -251,6 +252,14 @@
     } catch (e) {
       return null;
     }
+  }
+
+  // Na een eigen actie (terugsturen, verwerkt, …) kan de lijst verouderd zijn: markeren en direct vers ophalen.
+  var naActieTimer = null;
+  function naEigenActie() {
+    markeerVoorlopig(true);
+    clearTimeout(naActieTimer);
+    naActieTimer = setTimeout(function () { laad(true); }, 300);
   }
 
   var ververstimer = null;
@@ -268,9 +277,20 @@
       !$('detail').classList.contains('open')) laad(true);
   });
 
+  // Cache jonger dan dit: gewoon tonen. Ouder: tonen als voorlopig ("Bijwerken…", gedimd) tot de verse lijst er is.
+  var CACHE_VERS_MS = 30 * 1000;
+
+  function markeerVoorlopig(aan) {
+    $('lijst').classList.toggle('voorlopig', aan);
+    $('bijwerken').hidden = !aan;
+  }
+
   function laad(stil) {
     var cache = lijstUitCache();
-    if (cache && !stil && !$('lijst').innerHTML) toonLijst(cache);
+    if (cache && !stil && !$('lijst').innerHTML) {
+      toonLijst(cache, true);
+      markeerVoorlopig(!(cache.op && Date.now() - cache.op < CACHE_VERS_MS));
+    }
     // Staat er al een lijst (uit de cache of eerder geladen)? Dan is verversen stil: geen rode balk bij een storing.
     stil = stil || !!$('lijst').innerHTML;
     roep('overzicht', [], function (o) {
@@ -322,7 +342,8 @@
     }, herstel);
   });
 
-  function toonLijst(o) {
+  function toonLijst(o, uitCache) {
+    if (!uitCache) markeerVoorlopig(false); // verse gegevens van de server
     laatsteLijst = o.medewerkers;
     if (o.banvo) toonBanvo(o.banvo);
     if (o.sidesBijwerken) toonSidesBijwerken(o.sidesBijwerken);
