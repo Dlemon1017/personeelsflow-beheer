@@ -154,3 +154,6 @@ dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; overflow-
   border-radius: 10px; padding: 10px; margin-bottom: 8px; }
 .dialoog.groot { max-height: calc(100vh - 32px); overflow-y: auto; }
 .dialoog input { margin-bottom: 2px; }
+
+/* Adres opzoeken (PDOK) */
+.adres-melding { font-size: 14px; color: var(--geel, #e0b04a); margin: -4px 0 12px; }

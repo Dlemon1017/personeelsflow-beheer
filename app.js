@@ -570,7 +570,8 @@
       (d.controle ? controleHtml(d.controle) : '') +
       (d.terug ? '<div class="test mt12">↩ Teruggestuurd (' + esc(d.terug.stappen.join(', ')) + '): ' + esc(d.terug.reden) + '</div>' : '') +
       (d.nmbrs ? nmbrsKaartHtml(d) : '') + (d.sides ? sidesKaartHtml(d) : '') +
-      (d.waarschuwingen && !d.controle ? '<div class="test mt12">⚠ ' + esc(d.waarschuwingen) + '</div>' : '') +
+      (d.controle ? (d.waarschuwingenOverig ? '<div class="test mt12">⚠ ' + esc(d.waarschuwingenOverig) + '</div>' : '') :
+        d.waarschuwingen ? '<div class="test mt12">⚠ ' + esc(d.waarschuwingen) + '</div>' : '') +
       (d.formulier.length ? '<div class="kaart"><h2>Formulier</h2>' + (d.vergelijk ? vergelijkHtml(d.vergelijk) : '') +
         lijstHtml(d.formulier) + '</div>' : '') +
       '<div class="kaart"><h2>Gegevens</h2>' + lijstHtml(d.gegevens) + '</div>' +
@@ -704,8 +705,44 @@
         laad(true);
       }, function () { herstel(); achter.remove(); });
     });
+    var na = achter.querySelector('[data-cfout="toevoeging"]');
+    var melding = document.createElement('p');
+    melding.className = 'adres-melding';
+    melding.hidden = true;
+    na.parentNode.insertBefore(melding, na.nextSibling);
+    koppelAdresZoeker(achter, melding);
     document.body.appendChild(achter);
     achter.querySelector('input').focus();
+  }
+
+  /**
+   * Straat en woonplaats invullen na postcode + huisnummer (+ toevoeging) via PDOK (Kadaster, BAG; adres.js).
+   * Alleen postcode en huisnummer gaan naar PDOK. Niet gevonden: melding; PDOK weg: niets doen.
+   */
+  function koppelAdresZoeker(achter, melding) {
+    var veld = function (v) { return achter.querySelector('#c-' + v); };
+    var timer = null;
+    var laatste = '';
+    function zoek() {
+      var url = pdokUrl(veld('postcode').value, veld('huisnummer').value);
+      if (!url) { melding.hidden = true; laatste = ''; return; }
+      var sleutel = url + '|' + veld('toevoeging').value;
+      if (sleutel === laatste) return;
+      laatste = sleutel;
+      fetch(url, { credentials: 'omit', referrerPolicy: 'no-referrer' })
+        .then(function (r) { if (!r.ok) throw new Error('PDOK'); return r.json(); })
+        .then(function (j) {
+          if (sleutel !== laatste) return;
+          var o = bagOordeel(j.response.docs, { toevoeging: veld('toevoeging').value });
+          if (o.nummerBestaat) { veld('straat').value = o.straat; veld('woonplaats').value = o.woonplaats; }
+          melding.hidden = o.gevonden;
+          melding.textContent = 'Dit adres staat niet in de BAG. Controleer postcode, huisnummer en toevoeging.';
+        })
+        .catch(function () { laatste = ''; melding.hidden = true; });
+    }
+    ['postcode', 'huisnummer', 'toevoeging'].forEach(function (v) {
+      veld(v).addEventListener('input', function () { clearTimeout(timer); timer = setTimeout(zoek, 600); });
+    });
   }
 
   function toonFoto(src) {
