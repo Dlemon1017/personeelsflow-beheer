@@ -124,3 +124,9 @@ dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; overflow-
   border-right-color: transparent; animation: draai .7s linear infinite; }
 @keyframes draai { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .knop.bezig::before { animation-duration: 2s; } }
+
+/* Detail laden: grijze regels op de plek van de gegevens */
+.laad-regel { height: 14px; border-radius: 7px; background: var(--lijn); margin: 10px 0; animation: puls 1.2s ease-in-out infinite; }
+.laad-regel.kort { width: 60%; }
+@keyframes puls { 50% { opacity: .45; } }
+@media (prefers-reduced-motion: reduce) { .laad-regel { animation: none; } }

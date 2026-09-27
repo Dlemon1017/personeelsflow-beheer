@@ -276,11 +276,13 @@
     roep('overzicht', [], function (o) {
       bewaarLijst(o);
       toonLijst(o);
+      setTimeout(function () { haalDetailsVooraf(o.medewerkers); }, 1500);
       planVerversen();
     }, function () { planVerversen(); }, !!stil);
   }
 
   function toonLijst(o) {
+    laatsteLijst = o.medewerkers;
     (function () {
       var actief = o.medewerkers.filter(function (m) { return m.status !== 'Geannuleerd'; }).length;
       $('telling').textContent = actief === 1 ? '1 medewerker in de flow' : actief + ' medewerkers in de flow';
@@ -400,11 +402,52 @@
     }).join('') + '</dl>';
   }
 
+  // Geopende details en foto's kort in het werkgeheugen van dit tabblad (niet op schijf: er staan BSN en IBAN in).
+  var DETAIL_GELDIG_MS = 2 * 60 * 1000;
+  var detailGeheugen = {};
+  var fotoGeheugen = {};
+  var laatsteLijst = [];
+
+  function onthoudDetail(d, fotosOpnieuw) {
+    detailGeheugen[d.id] = { d: d, op: Date.now() };
+    if (fotosOpnieuw) delete fotoGeheugen[d.id]; // na een actie kunnen de foto's veranderd zijn
+  }
+
   function openDetail(id) {
-    $('detailInhoud').innerHTML = '<button class="terug" data-actie="terug">‹ Terug</button><p class="klein">Laden…</p>';
     $('detail').classList.add('open');
     $('detail').setAttribute('aria-hidden', 'false');
-    roep('detail', [id], toonDetail);
+    var bewaard = detailGeheugen[id];
+    if (bewaard && Date.now() - bewaard.op < DETAIL_GELDIG_MS) {
+      toonDetail(bewaard.d, true);
+    } else {
+      // Meteen tonen wat al uit de lijst bekend is; de rest vult aan zodra het binnen is.
+      var m = laatsteLijst.filter(function (x) { return x.id === id; })[0] || { naam: '', status: '', statusLabel: '', startdatum: '' };
+      $('detailInhoud').innerHTML = '<button class="terug" data-actie="terug">‹ Terug</button>' +
+        '<div class="kop-detail"><h1>' + esc(m.naam) + '</h1>' + (m.status ? badge(m.status, m.statusLabel) : '') + '</div>' +
+        '<p class="klein">Start ' + esc(m.startdatum) + '</p>' +
+        '<div class="kaart"><div class="laad-regel"></div><div class="laad-regel kort"></div><div class="laad-regel"></div>' +
+        '<p class="klein">Gegevens laden…</p></div>';
+      $('detailInhoud').dataset.id = id;
+    }
+    // Altijd verversen; stil als er al iets op het scherm staat.
+    roep('detail', [id], function (d) {
+      onthoudDetail(d);
+      if ($('detail').classList.contains('open') && $('detailInhoud').dataset.id === id) toonDetail(d, true);
+    }, null, !!bewaard);
+  }
+
+  /** Bovenste paar medewerkers alvast ophalen (stil, na elkaar), zodat hun detail direct opengaat. */
+  var vooraf = false;
+  function haalDetailsVooraf(lijst) {
+    if (vooraf) return;
+    vooraf = true;
+    var ids = lijst.filter(function (m) { return m.status !== 'Geannuleerd'; }).slice(0, 3).map(function (m) { return m.id; })
+      .filter(function (id) { return !detailGeheugen[id]; });
+    (function volgende() {
+      var id = ids.shift();
+      if (!id) { vooraf = false; return; }
+      roep('detail', [id], function (d) { onthoudDetail(d); volgende(); }, function () { vooraf = false; }, true);
+    })();
   }
 
   function sluitDetail() {
@@ -439,7 +482,8 @@
       }).join('') + '</div></div>';
   }
 
-  function toonDetail(d) {
+  function toonDetail(d, alOnthouden) {
+    if (!alOnthouden) onthoudDetail(d, true); // aangeroepen na een actie
     var acties = '';
     if (d.kanOpnieuwUitnodigen) acties += '<button class="knop licht" data-actie="opnieuw">Uitnodiging opnieuw sturen</button>';
     if (d.loonheffingUrl) acties += pdfKnop('loonheffing', 'Loonheffingsverklaring');
@@ -463,7 +507,7 @@
       (acties ? '<div class="acties">' + acties + '</div>' : '');
     $('detailInhoud').dataset.id = d.id;
     if (d.vergelijk) {
-      roep('miniaturen', [d.id], function (fotos) {
+      var zetFotos = function (fotos) {
         var vak = document.querySelector('#detailInhoud .miniaturen');
         if (!vak || $('detailInhoud').dataset.id !== d.id) return;
         if (!fotos.length) { vak.innerHTML = '<span class="klein">Geen foto’s</span>'; return; }
@@ -471,6 +515,11 @@
           return '<button data-actie="foto" data-naam="' + esc(f.naam) + '" aria-label="' + esc(f.naam) + ' groot bekijken">' +
             '<img src="' + esc(f.src) + '" alt=""></button>';
         }).join('');
+      };
+      if (fotoGeheugen[d.id]) { zetFotos(fotoGeheugen[d.id]); return; }
+      roep('miniaturen', [d.id], function (fotos) {
+        fotoGeheugen[d.id] = fotos;
+        zetFotos(fotos);
       }, function () {
         var vak = document.querySelector('#detailInhoud .miniaturen');
         if (vak && $('detailInhoud').dataset.id === d.id) vak.innerHTML = '<span class="klein">Foto’s niet geladen</span>';
