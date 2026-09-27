@@ -53,17 +53,32 @@
   }
 
   /** Zelfde vorm als vroeger google.script.run: roep(functie, args, ok, fout). */
-  function roep(fn, args, ok, fout) {
+  /** stil: geen foutmelding tonen (voor automatisch verversen op de achtergrond). */
+  function roep(fn, args, ok, fout, stil) {
     var s = sessieInGeheugen;
     if (!s) { toonLogin(); return; }
     api({ actie: 'beheer', sessie: s.sessie, functie: fn, args: args || [] }).then(function (r) {
       if (r.status === 'uitgelogd') { wisSessie(); toonLogin('Je sessie is verlopen of ingetrokken. Log opnieuw in.'); return; }
       if (r.status !== 'ok') throw new Error(r.melding || 'Er ging iets mis.');
       ok(r.data);
+      if (r.melding) toon(r.melding); // bijv. "Al gedaan door …": actuele status staat er al
     }).catch(function (e) {
-      toon((e && e.message) || 'Er ging iets mis.', true);
+      if (!stil) toon((e && e.message) || 'Er ging iets mis.', true);
       if (fout) fout(e);
     });
+  }
+
+  /** Knop meteen op "Bezig…" met spinner; geeft een functie terug die de knop herstelt. */
+  function bezig(knop, tekst) {
+    var oud = knop.innerHTML;
+    knop.disabled = true;
+    knop.classList.add('bezig');
+    knop.textContent = tekst || 'Bezig…';
+    return function () {
+      knop.disabled = false;
+      knop.classList.remove('bezig');
+      knop.innerHTML = oud;
+    };
   }
 
   // ---------- Inloggen ----------
@@ -84,36 +99,40 @@
     laad();
   }
 
+  var EMAIL_OK = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+
   $('loginEmail').addEventListener('submit', function (e) {
     e.preventDefault();
-    var knop = $('l-stuur');
     var email = $('l-email').value.trim();
     $('l-email-fout').textContent = '';
-    knop.disabled = true;
+    if (!EMAIL_OK.test(email)) { $('l-email-fout').textContent = 'Vul een geldig e-mailadres in.'; return; }
+    // Meteen naar het codescherm; de code wordt op de achtergrond verstuurd.
+    $('loginEmail').hidden = true;
+    $('loginCode').hidden = false;
+    $('l-uitleg').textContent = 'Als ' + email + ' toegang heeft, komt er nu een code naartoe. ' +
+      'De code is 10 minuten geldig. Kijk ook even in je spam.';
+    $('l-code').value = '';
+    $('l-code-fout').textContent = '';
+    $('l-code').focus();
     api({ actie: 'login_vraag', email: email }).then(function (r) {
-      knop.disabled = false;
-      if (r.status === 'fouten') { $('l-email-fout').textContent = r.fouten.email; return; }
-      $('loginEmail').hidden = true;
-      $('loginCode').hidden = false;
-      $('l-uitleg').textContent = 'Als ' + email + ' toegang heeft, is er nu een code naartoe gestuurd. ' +
-        'De code is 10 minuten geldig. Kijk ook even in je spam.';
-      $('l-code').value = '';
-      $('l-code').focus();
-    }).catch(function (err) { knop.disabled = false; $('l-email-fout').textContent = err.message; });
+      if (r.status === 'fouten') { toonLogin(r.fouten.email); return; }
+      if (r.status !== 'verstuurd') throw new Error();
+    }).catch(function () {
+      toonLogin('Versturen van de code lukte niet. Controleer je internet en probeer het opnieuw.');
+    });
   });
 
   $('loginCode').addEventListener('submit', function (e) {
     e.preventDefault();
-    var knop = $('l-inloggen');
     $('l-code-fout').textContent = '';
-    knop.disabled = true;
+    var herstel = bezig($('l-inloggen'), 'Inloggen…');
     api({ actie: 'login_code', email: $('l-email').value.trim(), code: $('l-code').value, apparaat: navigator.userAgent })
       .then(function (r) {
-        knop.disabled = false;
+        herstel();
         if (r.status !== 'ok') { $('l-code-fout').textContent = (r.fouten && r.fouten.code) || 'Inloggen lukte niet.'; return; }
         bewaarSessie({ sessie: r.sessie, email: r.email, verloopt: r.verloopt });
         toonApp();
-      }).catch(function (err) { knop.disabled = false; $('l-code-fout').textContent = err.message; });
+      }).catch(function (err) { herstel(); $('l-code-fout').textContent = err.message; });
   });
 
   $('l-opnieuw').addEventListener('click', function () { toonLogin(); });
@@ -121,6 +140,7 @@
   $('uitloggen').addEventListener('click', function () {
     var s = sessieInGeheugen;
     wisSessie();
+    wisLijstCache();
     if (s) api({ actie: 'uitloggen', sessie: s.sessie }).catch(function () { /* lokaal al uitgelogd */ });
     toonLogin('Je bent uitgelogd.');
   });
@@ -159,8 +179,58 @@
   }
 
   // ---------- Lijst ----------
-  function laad() {
+  // Lijst direct uit de browsercache (alleen naam, status en startdatum; geen persoonsgegevens) en daarna verversen.
+  var LIJST_SLEUTEL = 'pf_beheer_lijst';
+
+  function bewaarLijst(o) {
+    try {
+      localStorage.setItem(LIJST_SLEUTEL, JSON.stringify({
+        email: sessieInGeheugen && sessieInGeheugen.email, testmodus: o.testmodus, testEmail: o.testEmail,
+        medewerkers: o.medewerkers.map(function (m) {
+          return { id: m.id, naam: m.naam, startdatum: m.startdatum, status: m.status, statusLabel: m.statusLabel };
+        })
+      }));
+    } catch (e) { /* geen opslag beschikbaar */ }
+  }
+  function lijstUitCache() {
+    try {
+      var o = JSON.parse(localStorage.getItem(LIJST_SLEUTEL) || 'null');
+      return o && sessieInGeheugen && o.email === sessieInGeheugen.email ? o : null;
+    } catch (e) {
+      return null;
+    }
+  }
+  function wisLijstCache() {
+    try { localStorage.removeItem(LIJST_SLEUTEL); } catch (e) { /* niets */ }
+  }
+
+  var ververstimer = null;
+  function planVerversen() {
+    clearTimeout(ververstimer);
+    ververstimer = setTimeout(function () {
+      // Alleen als het tabblad zichtbaar is, je bent ingelogd en geen detail of formulier open hebt.
+      if (document.visibilityState === 'visible' && sessieInGeheugen && !$('app').hidden &&
+        !$('detail').classList.contains('open') && $('formulier').hidden) laad(true);
+      else planVerversen();
+    }, 30000);
+  }
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'visible' && sessieInGeheugen && !$('app').hidden &&
+      !$('detail').classList.contains('open')) laad(true);
+  });
+
+  function laad(stil) {
+    var cache = lijstUitCache();
+    if (cache && !stil && !$('lijst').innerHTML) toonLijst(cache);
     roep('overzicht', [], function (o) {
+      bewaarLijst(o);
+      toonLijst(o);
+      planVerversen();
+    }, function () { planVerversen(); }, !!stil);
+  }
+
+  function toonLijst(o) {
+    (function () {
       var actief = o.medewerkers.filter(function (m) { return m.status !== 'Geannuleerd'; }).length;
       $('telling').textContent = actief === 1 ? '1 medewerker in de flow' : actief + ' medewerkers in de flow';
       $('testbalk').hidden = !o.testmodus;
@@ -176,7 +246,7 @@
           (m.waarschuwingen ? '<div class="let">⚠ ' + esc(m.waarschuwingen) + '</div>' : '') + '</div>' +
           badge(m.status, m.statusLabel) + '</button>';
       }).join('');
-    });
+    })();
   }
 
   $('lijst').addEventListener('click', function (e) {
@@ -246,9 +316,7 @@
 
   $('formulier').addEventListener('submit', function (e) {
     e.preventDefault();
-    var knop = $('startKnop');
-    knop.disabled = true;
-    knop.textContent = 'Bezig…';
+    var herstelStart = bezig($('startKnop'), 'Bezig…');
     var invoer = {
       naam: $('f-naam').value,
       leeftijd: Number($('f-leeftijd').value),
@@ -257,8 +325,7 @@
       startdatum: naarNl($('f-start').value)
     };
     roep('start', [invoer], function (r) {
-      knop.disabled = false;
-      knop.textContent = 'Start';
+      herstelStart();
       if (!r.ok) {
         toonFouten(r.fouten || {});
         var eerste = { naam: 'f-naam', leeftijd: 'f-leeftijd', email: 'f-email', startdatum: 'f-start' }[Object.keys(r.fouten || {})[0]];
@@ -271,8 +338,7 @@
       else toon(r.medewerker.naam + ' is uitgenodigd.');
       laad();
     }, function () {
-      knop.disabled = false;
-      knop.textContent = 'Start';
+      herstelStart();
     });
   });
 
@@ -316,7 +382,7 @@
     return '<div class="vergelijk"><div><div class="klein">Geboortedatum</div>' +
       '<div class="groot">' + esc(v.geboortedatum) + '</div>' +
       '<div class="klein">' + v.leeftijdOpStart + ' jaar op de startdatum</div></div>' +
-      '<div class="miniaturen">' + v.fotos.map(function (f) {
+      '<div class="miniaturen">' + (v.fotos.length ? '' : '<span class="klein">Foto’s laden…</span>') + v.fotos.map(function (f) {
         return '<button data-actie="foto" data-naam="' + esc(f.naam) + '" aria-label="' + esc(f.naam) + ' groot bekijken">' +
           '<img src="' + esc(f.src) + '" alt=""></button>';
       }).join('') + '</div></div>';
@@ -329,6 +395,8 @@
     else if (d.loonheffingBezig) acties += '<div class="klein midden">Loonheffingsverklaring wordt gemaakt (binnen 5 minuten).</div>';
     if (d.heeftContract) acties += pdfKnop('contract', d.contractGetekend ? 'Contract (getekend)' : 'Contract (nog niet getekend)');
     if (d.mapUrl) acties += '<a class="knop licht link" target="_blank" rel="noopener" href="' + esc(d.mapUrl) + '">Drive-map openen</a>';
+    if (d.kanContractOpnieuw) acties += '<button class="knop licht" data-actie="contract-opnieuw" data-gezien="' +
+      esc(d.contractGemaaktOp) + '">Contract opnieuw maken</button>';
     if (d.kanAnnuleren) acties += '<button class="knop gevaar" data-actie="annuleer">Annuleren</button>';
 
     $('detailInhoud').innerHTML =
@@ -343,6 +411,16 @@
       '<div class="kaart"><h2>Verloop</h2>' + lijstHtml(d.tijdlijn) + '</div>' +
       (acties ? '<div class="acties">' + acties + '</div>' : '');
     $('detailInhoud').dataset.id = d.id;
+    if (d.vergelijk) {
+      roep('miniaturen', [d.id], function (fotos) {
+        var vak = document.querySelector('#detailInhoud .miniaturen');
+        if (!vak || $('detailInhoud').dataset.id !== d.id) return;
+        vak.innerHTML = fotos.map(function (f) {
+          return '<button data-actie="foto" data-naam="' + esc(f.naam) + '" aria-label="' + esc(f.naam) + ' groot bekijken">' +
+            '<img src="' + esc(f.src) + '" alt=""></button>';
+        }).join('');
+      });
+    }
   }
 
   /** Eigen bevestigingsvenster (i.p.v. confirm(), dat een melding van googleusercontent.com toont). Geeft een Promise<boolean>. */
@@ -396,8 +474,7 @@
     if (actie === 'pdf') {
       var vak = el.parentNode;
       var label = el.textContent;
-      el.disabled = true;
-      el.textContent = 'Laden…';
+      var herstelPdf = bezig(el, 'Laden…');
       roep('bestand', [id, el.dataset.soort], function (b) {
         // Na het laden twee echte links: die openen ook in Safari zonder pop-upblokkering.
         var url = URL.createObjectURL(base64NaarBlob(b.base64, b.type));
@@ -408,7 +485,7 @@
         vak.children[1].href = url;
         vak.children[1].download = b.naam;
         vak.children[1].textContent = 'Downloaden';
-      }, function () { el.disabled = false; el.textContent = label; });
+      }, herstelPdf);
       return;
     }
     if (actie === 'foto') {
@@ -424,9 +501,10 @@
         'De bedragen worden definitief op ' + el.dataset.leeftijd + ' jaar gezet. Daarna wordt het contract gemaakt en gemaild.',
         el.dataset.leeftijd + ' klopt').then(function (ja) {
         if (!ja) return;
-        el.disabled = true;
-        roep('leeftijdKlopt', [id, 'berekend', ''], function (d) { toonDetail(d); toon('Leeftijd bevestigd, bedragen vastgelegd.'); },
-          function () { el.disabled = false; });
+        var herstel = bezig(el);
+        roep('leeftijdKlopt', [id, 'berekend', ''], function (d) {
+          toonDetail(d); toon('Leeftijd bevestigd, bedragen vastgelegd.'); laad(true);
+        }, herstel);
       });
       return;
     }
@@ -438,23 +516,33 @@
     if (actie === 'leeftijd-opgegeven-bevestig') {
       var geb = naarNl($('juisteGeboortedatum').value);
       if (!geb) { $('datumFout').textContent = 'Vul de juiste geboortedatum in.'; return; }
-      el.disabled = true;
+      var herstelGeb = bezig(el);
       roep('leeftijdKlopt', [id, 'opgegeven', geb], function (d) {
-        toonDetail(d); toon('Leeftijd en geboortedatum opgeslagen. Loonheffingsverklaring wordt opnieuw gemaakt.');
-      }, function (e) { el.disabled = false; $('datumFout').textContent = (e && e.message) || ''; });
+        toonDetail(d); toon('Leeftijd en geboortedatum opgeslagen. Loonheffingsverklaring wordt opnieuw gemaakt.'); laad(true);
+      }, function (e) { herstelGeb(); $('datumFout').textContent = (e && e.message) || ''; });
       return;
     }
     if (actie === 'opnieuw') {
-      el.disabled = true;
-      roep('opnieuwUitnodigen', [id], function (d) { toonDetail(d); toon('Uitnodiging opnieuw verstuurd.'); },
-        function () { el.disabled = false; });
+      var herstelUit = bezig(el);
+      roep('opnieuwUitnodigen', [id], function (d) { toonDetail(d); toon('Uitnodiging opnieuw verstuurd.'); laad(true); },
+        herstelUit);
+    }
+    if (actie === 'contract-opnieuw') {
+      bevestig('Contract opnieuw maken?', 'Het huidige, nog niet getekende contract wordt vervangen door een nieuwe ' +
+        'versie en de medewerker krijgt de ondertekenlink opnieuw per mail.', 'Opnieuw maken').then(function (ja) {
+        if (!ja) return;
+        var herstelC = bezig(el, 'Contract wordt gemaakt…');
+        roep('contractOpnieuw', [id, Number(el.dataset.gezien) || 0], function (d) {
+          toonDetail(d); toon('Contract opnieuw gemaakt en gemaild.'); laad(true);
+        }, herstelC);
+      });
     }
     if (actie === 'annuleer') {
       bevestig('Aanmelding annuleren?', 'De links in de mails werken daarna niet meer. Dit kun je niet ongedaan maken.',
         'Annuleren', true, 'Niet annuleren').then(function (ja) {
         if (!ja) return;
-        el.disabled = true;
-        roep('annuleren', [id], function (d) { toonDetail(d); toon('Geannuleerd.'); }, function () { el.disabled = false; });
+        var herstelAn = bezig(el);
+        roep('annuleren', [id], function (d) { toonDetail(d); toon('Geannuleerd.'); laad(true); }, herstelAn);
       });
     }
   });

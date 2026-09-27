@@ -114,4 +114,13 @@ dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; overflow-
 .mt10 { margin-top: 10px; }
 .mt12 { margin-top: 12px; }
 .midden { text-align: center; }
-.logo { display: block; width: 120px; height: 120px; border-radius: 50%; margin: 0 auto 20px; }
+.logo { display: block; width: 120px; height: 120px; border-radius: 50%; overflow: hidden; margin: 0 auto 20px;
+  object-fit: cover; clip-path: circle(50% at 50% 50%); }
+
+.b-Contract-verstuurd { background: var(--paars-bg); color: var(--paars); }
+.b-Getekend { background: var(--groen-bg); color: var(--groen); }
+.knop.bezig { display: inline-flex; align-items: center; justify-content: center; gap: 10px; }
+.knop.bezig::before { content: ""; width: 16px; height: 16px; border-radius: 50%; border: 2px solid currentColor;
+  border-right-color: transparent; animation: draai .7s linear infinite; }
+@keyframes draai { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .knop.bezig::before { animation-duration: 2s; } }
