@@ -690,18 +690,11 @@
     var open = r.stappen.reduce(function (n, s) { return n + (s.open ? s.open.length : 0); }, 0);
     return '<p>BSN en IBAN zijn gemaskeerd. Schrijven naar Nmbrs staat <strong>' + (r.schrijvenAan ? 'AAN' : 'uit') + '</strong>.' +
       (r.sjabloon ? ' Sjabloon: ' + esc(r.sjabloon) + '.' : '') + (r.soort ? ' Soort: ' + esc(r.soort) + '.' : '') +
-      ' Echt aanmaken is nog niet gebouwd.</p>' + salarisHtml(r.salaris) +
+      ' Echt aanmaken is nog niet gebouwd.</p>' +
+      (r.template ? '<div class="test mt12">Default medewerker: <strong>' + esc(r.template.naam) + '</strong> · template-ID ' +
+        esc(r.template.id) + '<br><span class="klein">Volgens de documentatie alleen voor soort payroll.</span></div>' : '') +
       (r.waarschuwingen.length ? '<div class="test">' + r.waarschuwingen.map(esc).join('<br>') + '</div>' : '') +
       '<p class="klein">' + r.stappen.length + ' stappen, ' + open + ' open punt(en).</p>' + planHtml(r.stappen);
-  }
-
-  function salarisHtml(s) {
-    if (!s) return '';
-    if (s.fout) return '<div class="fout mt12">Salaristabel: ' + esc(s.fout) + '</div>';
-    var euro = function (x) { return x == null ? '–' : '€ ' + Number(x).toFixed(2).replace('.', ','); };
-    return '<div class="' + (s.gelijk ? 'test' : 'fout') + ' mt12">Salaristabel ' + esc(s.tabel) + ' · schaal ' + esc(s.schaal) +
-      ' · stap ' + esc(s.stap) + ' (leeftijd op startdatum ' + esc(String(s.leeftijd)) + ')<br>Bedrag stap ' + euro(s.bedrag) +
-      ' · ons basisuurloon ' + euro(s.ons) + (s.gelijk ? ' ✓ gelijk' : ' ✗ VERSCHIL: niet aanmaken') + '</div>';
   }
 
   /** Kies een bestaande Nmbrs-medewerker om te koppelen. Promise<employeeId | null>. */
