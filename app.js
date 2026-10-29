@@ -555,13 +555,20 @@
   }
 
   function nmbrsKaartHtml(d) {
+    var a = d.nmbrsAanmaak;
+    var onvolledig = a && !a.klaar;
     return '<div class="kaart werkkaart"><h2>Nmbrs</h2>' + d.nmbrs.map(function (g) {
       return '<h3 class="groep">' + esc(g.titel) + '</h3><dl>' + g.velden.map(function (v) { return kopieerRij(v[0], v[1]); }).join('') + '</dl>';
     }).join('') +
-      (d.nmbrsKoppeling ? '<p class="klaar-tekst">✓ Gekoppeld aan Nmbrs' + (d.nmbrsKoppeling.op ? ' (' + esc(d.nmbrsKoppeling.op) +
-        (d.nmbrsKoppeling.door ? ' · ' + esc(d.nmbrsKoppeling.door) : '') + ')' : '') + '</p>' : '') +
+      (d.nmbrsKoppeling ? '<p class="klaar-tekst">✓ ' + (d.nmbrsKoppeling.aangemaakt ? 'Aangemaakt in' : 'Gekoppeld aan') + ' Nmbrs' +
+        (d.nmbrsKoppeling.op ? ' (' + esc(d.nmbrsKoppeling.op) + (d.nmbrsKoppeling.door ? ' · ' + esc(d.nmbrsKoppeling.door) : '') + ')' : '') +
+        '</p>' : '') +
+      (onvolledig ? '<div class="fout mt12">Aanmaken in Nmbrs onvolledig: ' + a.gedaan + ' van ' + a.totaal + ' stappen gelukt. ' +
+        'Ontbrekend: ' + esc(a.ontbrekend.join(', ')) + '.</div>' : '') +
       '<div class="knoppen-rij mt12"><button class="knop licht klein-knop" data-actie="nmbrs-proefrun">Proefrun Nmbrs</button>' +
-      (d.nmbrsKoppeling ? '' : '<button class="knop licht klein-knop" data-actie="nmbrs-koppel">Bestaande Nmbrs-medewerker koppelen</button>') +
+      (onvolledig ? '<button class="knop klein-knop" data-actie="nmbrs-aanmaken">Ontbrekende stappen afmaken</button>' : '') +
+      (d.nmbrsKoppeling ? '' : '<button class="knop klein-knop" data-actie="nmbrs-aanmaken">Aanmaken in Nmbrs</button>' +
+        '<button class="knop licht klein-knop" data-actie="nmbrs-koppel">Bestaande Nmbrs-medewerker koppelen</button>') +
       '</div>' +
       (d.nmbrsVerwerkt ? '<p class="klaar-tekst">✓ Nmbrs verwerkt</p>'
       : '<button class="knop mt12" data-actie="verwerkt" data-welk="nmbrs">Nmbrs verwerkt</button>') + '</div>';
@@ -680,7 +687,8 @@
 
   function planHtml(stappen) {
     return stappen.map(function (s, i) {
-      return '<div class="plan-stap"><div><strong>' + (i + 1) + '. ' + esc(s.stap) + '</strong> <span class="klein">' + esc(s.methode) + ' ' +
+      return '<div class="plan-stap"><div><strong>' + (i + 1) + '. ' + esc(s.stap) + (s.gedaan ? ' ✓ al gedaan' : '') +
+        '</strong> <span class="klein">' + esc(s.methode) + ' ' +
         esc(s.pad) + '</span></div>' + (s.open && s.open.length ? '<div class="fout">Open: ' + esc(s.open.join(' ')) + '</div>' : '') +
         '<pre class="plan-json">' + esc(JSON.stringify(s.body, null, 2)) + '</pre></div>';
     }).join('');
@@ -689,12 +697,38 @@
   function proefrunHtml(r) {
     var open = r.stappen.reduce(function (n, s) { return n + (s.open ? s.open.length : 0); }, 0);
     return '<p>BSN en IBAN zijn gemaskeerd. Schrijven naar Nmbrs staat <strong>' + (r.schrijvenAan ? 'AAN' : 'uit') + '</strong>.' +
-      (r.sjabloon ? ' Sjabloon: ' + esc(r.sjabloon) + '.' : '') + (r.soort ? ' Soort: ' + esc(r.soort) + '.' : '') +
-      ' Echt aanmaken is nog niet gebouwd.</p>' +
+      (r.sjabloon ? ' Sjabloon: ' + esc(r.sjabloon) + '.' : '') + (r.soort ? ' Soort: ' + esc(r.soort) + '.' : '') + '</p>' +
       (r.template ? '<div class="test mt12">Default medewerker: <strong>' + esc(r.template.naam) + '</strong> · template-ID ' +
-        esc(r.template.id) + '<br><span class="klein">Volgens de documentatie alleen voor soort payroll.</span></div>' : '') +
-      (r.waarschuwingen.length ? '<div class="test">' + r.waarschuwingen.map(esc).join('<br>') + '</div>' : '') +
+        esc(r.template.id) + '</div>' : '') +
+      (r.hervatten ? '<div class="test mt12">Deze medewerker is al aangemaakt; alleen de stappen zonder ✓ worden nog uitgevoerd.</div>' : '') +
+      (r.waarschuwingen.length ? '<div class="fout mt12"><strong>Niet aanmaken:</strong><br>' + r.waarschuwingen.map(esc).join('<br>') + '</div>' : '') +
       '<p class="klein">' + r.stappen.length + ' stappen, ' + open + ' open punt(en).</p>' + planHtml(r.stappen);
+  }
+
+  /** Proefrun + bevestiging voor aanmaken in Nmbrs. Promise<true | false>. Bevestigen alleen als de server het toestaat. */
+  function aanmaakDialoog(r) {
+    return new Promise(function (klaar) {
+      var achter = document.createElement('div');
+      achter.className = 'dialoog-achter';
+      achter.innerHTML = '<div class="dialoog groot" role="dialog" aria-modal="true"><h2>' +
+        (r.hervatten ? 'Ontbrekende stappen afmaken in Nmbrs' : 'Aanmaken in Nmbrs') + '</h2>' + proefrunHtml(r) +
+        (r.kanAanmaken ? '<p><strong>Dit maakt de medewerker echt aan in Nmbrs.</strong> Controleer de stappen hierboven.</p>' :
+          '<p class="fout">' + (r.schrijvenAan ? 'Aanmaken kan niet (zie hierboven).' :
+            'Schrijven naar Nmbrs staat uit (Instellingen › nmbrs_schrijven_aan).') + '</p>') +
+        '<div class="dialoog-knoppen"><button class="knop licht" data-keuze="nee">Terug</button>' +
+        (r.kanAanmaken ? '<button class="knop" data-keuze="ja">' + (r.hervatten ? 'Bevestigen: afmaken' : 'Bevestigen: aanmaken in Nmbrs') +
+          '</button>' : '') + '</div></div>';
+      function sluit(uitkomst) { document.removeEventListener('keydown', toets); achter.remove(); klaar(uitkomst); }
+      function toets(e) { if (e.key === 'Escape') sluit(false); }
+      achter.addEventListener('click', function (e) {
+        if (e.target === achter) return sluit(false);
+        var k = e.target.closest('[data-keuze]');
+        if (k) sluit(k.dataset.keuze === 'ja');
+      });
+      document.addEventListener('keydown', toets);
+      document.body.appendChild(achter);
+      achter.querySelector('[data-keuze="nee"]').focus();
+    });
   }
 
   /** Kies een bestaande Nmbrs-medewerker om te koppelen. Promise<employeeId | null>. */
@@ -938,6 +972,26 @@
     if (actie === 'nmbrs-proefrun') {
       var herstelP = bezig(el, 'Proefrun…');
       roep('nmbrsProefrun', [id], function (r) { herstelP(); infoDialoog('Proefrun Nmbrs (er gaat niets naar Nmbrs)', proefrunHtml(r)); }, herstelP);
+      return;
+    }
+    if (actie === 'nmbrs-aanmaken') {
+      var herstelA = bezig(el, 'Proefrun…');
+      roep('nmbrsProefrun', [id], function (r) {
+        herstelA();
+        aanmaakDialoog(r).then(function (ja) {
+          if (!ja) return;
+          var herstelA2 = bezig(el, 'Aanmaken in Nmbrs…');
+          roep('nmbrsAanmaken', [id], function (d) {
+            toonDetail(d); laad(true);
+            var u = d.nmbrsAanmaken || {};
+            if (u.ok) { toon('Aangemaakt in Nmbrs (' + u.uitgevoerd + ' stappen). Nmbrs verwerkt staat aan.'); return; }
+            infoDialoog('Aanmaken in Nmbrs gestopt', '<div class="fout">Mislukt bij stap <strong>' + esc(u.mislukt) + '</strong>: ' +
+              esc(u.melding) + '</div><p>Nog niet gedaan: ' + esc((u.ontbrekend || []).join(', ')) + '.</p>' +
+              '<p>De stappen daarvoor zijn wel opgeslagen. Los het probleem op en klik op de Nmbrs-kaart op ' +
+              '<strong>Ontbrekende stappen afmaken</strong>. Er wordt dan geen tweede medewerker aangemaakt.</p>');
+          }, herstelA2);
+        });
+      }, herstelA);
       return;
     }
     if (actie === 'nmbrs-koppel') {
