@@ -561,7 +561,9 @@
 
   function sidesKaartHtml(d) {
     return '<div class="kaart werkkaart"><h2>Sides</h2><dl>' + d.sides.map(function (v) { return kopieerRij(v[0], v[1]); }).join('') +
-      '</dl>' + (d.sidesVerwerkt ? '<p class="klaar-tekst">✓ Sides verwerkt</p>'
+      '</dl>' + (d.sidesNummer && d.sidesNummer.wijzigbaar ?
+        '<button class="knop licht klein-knop" data-actie="sides-nummer">Personeelsnummer wijzigen</button>' : '') +
+      (d.sidesVerwerkt ? '<p class="klaar-tekst">✓ Sides verwerkt</p>'
       : '<button class="knop mt12" data-actie="verwerkt" data-welk="sides">Sides verwerkt</button>') + '</div>';
   }
 
@@ -652,6 +654,39 @@
       document.addEventListener('keydown', toets);
       document.body.appendChild(achter);
       achter.querySelector('[data-keuze="nee"]').focus();
+    });
+  }
+
+  /** Venster "Personeelsnummer wijzigen" (Sides). Geeft Promise<nummer als tekst | null>. */
+  function sidesNummerDialoog(oud) {
+    return new Promise(function (klaar) {
+      var achter = document.createElement('div');
+      achter.className = 'dialoog-achter';
+      achter.innerHTML = '<div class="dialoog" role="dialog" aria-modal="true" aria-labelledby="sTitel">' +
+        '<h2 id="sTitel">Sides-personeelsnummer</h2><p>Voorgesteld: <strong>' + esc(oud) + '</strong>. Je kunt bijvoorbeeld ' +
+        'een vrijgekomen nummer van een gestopte medewerker hergebruiken. Een lager nummer verandert de teller voor ' +
+        'nieuwe medewerkers niet.</p><label for="sNummer">Nieuw nummer</label>' +
+        '<input id="sNummer" inputmode="numeric" maxlength="6" value="' + esc(oud) + '">' +
+        '<div class="fout" id="sFout"></div><div class="dialoog-knoppen"><button class="knop licht" data-keuze="nee">Annuleren</button>' +
+        '<button class="knop" data-keuze="ja">Opslaan</button></div></div>';
+      function sluit(uitkomst) { achter.remove(); klaar(uitkomst); }
+      function opslaan() {
+        var w = achter.querySelector('#sNummer').value.trim();
+        if (!/^\d{1,6}$/.test(w) || Number(w) < 1) { achter.querySelector('#sFout').textContent = 'Vul een geheel getal van 1 of hoger in.'; return; }
+        sluit(String(Number(w)));
+      }
+      achter.addEventListener('click', function (e) {
+        if (e.target === achter) return sluit(null);
+        var k = e.target.closest('[data-keuze]');
+        if (!k) return;
+        if (k.dataset.keuze === 'nee') return sluit(null);
+        opslaan();
+      });
+      achter.querySelector('#sNummer').addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); opslaan(); } });
+      document.body.appendChild(achter);
+      var invoer = achter.querySelector('#sNummer');
+      invoer.focus();
+      invoer.select();
     });
   }
 
@@ -793,8 +828,25 @@
       var welk = el.dataset.welk;
       var herstelV = bezig(el);
       roep('verwerkt', [id, welk], function (d) {
-        toonDetail(d); toon((welk === 'nmbrs' ? 'Nmbrs' : 'Sides') + ' verwerkt.' + (d.status === 'Klaar' ? ' Status: Klaar.' : '')); laad(true);
+        toonDetail(d);
+        var mail = !d.inkloknummerMail ? '' : d.inkloknummerMail === 'verstuurd' ? ' Mail met inkloknummer verstuurd.' :
+          ' Let op: mail met inkloknummer niet verstuurd (' + d.inkloknummerMail.replace(/^fout: /, '') + ').';
+        toon((welk === 'nmbrs' ? 'Nmbrs' : 'Sides') + ' verwerkt.' + (d.status === 'Klaar' ? ' Status: Klaar.' : '') + mail,
+          /niet verstuurd/.test(mail));
+        laad(true);
       }, herstelV);
+      return;
+    }
+    if (actie === 'sides-nummer') {
+      var huidigD = (detailGeheugen[id] || {}).d;
+      var oud = huidigD && huidigD.sidesNummer ? huidigD.sidesNummer.waarde : '';
+      sidesNummerDialoog(oud).then(function (nieuw) {
+        if (nieuw === null || nieuw === oud) return;
+        var herstelS = bezig(el);
+        roep('sidesNummer', [id, nieuw, oud], function (d) {
+          toonDetail(d); toon('Sides-personeelsnummer gewijzigd: ' + oud + ' → ' + d.sidesNummer.waarde + '.');
+        }, herstelS);
+      });
       return;
     }
     if (actie === 'terugsturen') {
