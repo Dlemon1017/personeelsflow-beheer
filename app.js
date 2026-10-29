@@ -689,9 +689,19 @@
   function proefrunHtml(r) {
     var open = r.stappen.reduce(function (n, s) { return n + (s.open ? s.open.length : 0); }, 0);
     return '<p>BSN en IBAN zijn gemaskeerd. Schrijven naar Nmbrs staat <strong>' + (r.schrijvenAan ? 'AAN' : 'uit') + '</strong>.' +
-      (r.sjabloon ? ' Sjabloon: ' + esc(r.sjabloon) + '.' : '') + ' Echt aanmaken is nog niet gebouwd.</p>' +
+      (r.sjabloon ? ' Sjabloon: ' + esc(r.sjabloon) + '.' : '') + (r.soort ? ' Soort: ' + esc(r.soort) + '.' : '') +
+      ' Echt aanmaken is nog niet gebouwd.</p>' + salarisHtml(r.salaris) +
       (r.waarschuwingen.length ? '<div class="test">' + r.waarschuwingen.map(esc).join('<br>') + '</div>' : '') +
       '<p class="klein">' + r.stappen.length + ' stappen, ' + open + ' open punt(en).</p>' + planHtml(r.stappen);
+  }
+
+  function salarisHtml(s) {
+    if (!s) return '';
+    if (s.fout) return '<div class="fout mt12">Salaristabel: ' + esc(s.fout) + '</div>';
+    var euro = function (x) { return x == null ? '–' : '€ ' + Number(x).toFixed(2).replace('.', ','); };
+    return '<div class="' + (s.gelijk ? 'test' : 'fout') + ' mt12">Salaristabel ' + esc(s.tabel) + ' · schaal ' + esc(s.schaal) +
+      ' · stap ' + esc(s.stap) + ' (leeftijd op startdatum ' + esc(String(s.leeftijd)) + ')<br>Bedrag stap ' + euro(s.bedrag) +
+      ' · ons basisuurloon ' + euro(s.ons) + (s.gelijk ? ' ✓ gelijk' : ' ✗ VERSCHIL: niet aanmaken') + '</div>';
   }
 
   /** Kies een bestaande Nmbrs-medewerker om te koppelen. Promise<employeeId | null>. */
@@ -735,6 +745,7 @@
       roep('nmbrsRedenen', [], function (r) {
         sel.innerHTML = '<option value="">' + (r.lijst.length ? 'Kies een reden' : 'Geen lijst uit Nmbrs (' + esc(r.fout || 'niet bereikbaar') + ')') + '</option>' +
           r.lijst.map(function (x) { return '<option value="' + esc(String(x.code)) + '">' + esc(x.code + ' – ' + x.reden) + '</option>'; }).join('');
+        if (r.lijst.some(function (x) { return String(x.code) === '20'; })) sel.value = '20'; // standaard: opzegging door werknemer
       }, function () { sel.innerHTML = '<option value="">Geen lijst uit Nmbrs</option>'; }, true);
       achter.addEventListener('click', function (e) {
         if (e.target === achter) { achter.remove(); return klaar(null); }
