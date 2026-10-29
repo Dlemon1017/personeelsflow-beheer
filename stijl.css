@@ -161,3 +161,12 @@ dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; overflow-
 /* Lijst uit de browsercache die ouder is dan 30 s: voorlopig tot de verse lijst er is */
 .lijst.voorlopig { opacity: .45; transition: opacity .2s; }
 .bijwerken { margin-top: 2px; font-style: italic; }
+
+/* Nmbrs: proefrun, koppelen, uit dienst */
+.b-Uit-dienst { background: var(--grijs-bg); color: var(--grijs); }
+.knoppen-rij { display: flex; flex-wrap: wrap; gap: 8px; }
+.plan-stap { border-top: 1px solid var(--lijn); padding: 10px 0; }
+.plan-json { font-size: 12px; white-space: pre-wrap; word-break: break-word; background: var(--bg); border-radius: 8px;
+  padding: 8px; margin: 6px 0 0; max-height: 220px; overflow: auto; }
+.dialoog select, .dialoog input[type=date] { width: 100%; font: inherit; color: var(--tekst); background: var(--bg);
+  border: 1px solid var(--lijn); border-radius: 10px; padding: 10px; margin-bottom: 8px; }

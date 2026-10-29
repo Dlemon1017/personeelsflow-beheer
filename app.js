@@ -70,6 +70,8 @@
    * Vangt de uitschieters van Google Apps Script op. Acties die iets veranderen worden nooit dubbel verstuurd.
    */
   var ALLEEN_LEZEN = ['overzicht', 'detail', 'miniaturen', 'voorbeeld', 'bestand', 'fotoGroot'];
+  // Lezen in Nmbrs (kan even duren): niet dubbel versturen, maar de lijst ook niet als verouderd markeren.
+  var NMBRS_LEZEN = ['nmbrsProefrun', 'nmbrsKandidaten', 'nmbrsRedenen'];
   // Achtergrondaanroepen: mislukken mag nooit een rode balk geven (de gegevens staan al op het scherm).
   var ACHTERGROND = ['miniaturen', 'voorbeeld'];
 
@@ -109,7 +111,7 @@
     (ALLEEN_LEZEN.indexOf(fn) !== -1 ? apiSnel(verzoek, 6000, 45000) : api(verzoek)).then(function (r) {
       if (r.status === 'uitgelogd') { wisSessie(); toonLogin('Je sessie is verlopen of ingetrokken. Log opnieuw in.'); return; }
       if (r.status !== 'ok') throw new Error(r.melding || 'Er ging iets mis.');
-      if (ALLEEN_LEZEN.indexOf(fn) === -1) naEigenActie();
+      if (ALLEEN_LEZEN.indexOf(fn) === -1 && NMBRS_LEZEN.indexOf(fn) === -1) naEigenActie();
       ok(r.data);
       if (r.melding) toon(r.melding); // bijv. "Al gedaan door …": actuele status staat er al
     }).catch(function (e) {
@@ -348,7 +350,7 @@
     if (o.banvo) toonBanvo(o.banvo);
     if (o.sidesBijwerken) toonSidesBijwerken(o.sidesBijwerken);
     (function () {
-      var actief = o.medewerkers.filter(function (m) { return m.status !== 'Geannuleerd'; }).length;
+      var actief = o.medewerkers.filter(function (m) { return m.status !== 'Geannuleerd' && m.status !== 'Uit dienst'; }).length;
       $('telling').textContent = actief === 1 ? '1 medewerker in de flow' : actief + ' medewerkers in de flow';
       $('testbalk').hidden = !o.testmodus;
       $('testbalk').textContent = 'Testmodus: alle mails gaan naar ' + o.testEmail + '.';
@@ -357,7 +359,7 @@
         return;
       }
       $('lijst').innerHTML = o.medewerkers.map(function (m) {
-        return '<button class="item' + (m.status === 'Geannuleerd' ? ' uit' : '') + '" data-id="' + esc(m.id) + '">' +
+        return '<button class="item' + (m.status === 'Geannuleerd' || m.status === 'Uit dienst' ? ' uit' : '') + '" data-id="' + esc(m.id) + '">' +
           '<div class="wie"><div class="naam">' + esc(m.naam) + '</div>' +
           '<div class="wanneer">Start ' + esc(m.startdatum) + '</div>' +
           (m.waarschuwingen ? '<div class="let">⚠ ' + esc(m.waarschuwingen) + '</div>' : '') + '</div>' +
@@ -555,7 +557,13 @@
   function nmbrsKaartHtml(d) {
     return '<div class="kaart werkkaart"><h2>Nmbrs</h2>' + d.nmbrs.map(function (g) {
       return '<h3 class="groep">' + esc(g.titel) + '</h3><dl>' + g.velden.map(function (v) { return kopieerRij(v[0], v[1]); }).join('') + '</dl>';
-    }).join('') + (d.nmbrsVerwerkt ? '<p class="klaar-tekst">✓ Nmbrs verwerkt</p>'
+    }).join('') +
+      (d.nmbrsKoppeling ? '<p class="klaar-tekst">✓ Gekoppeld aan Nmbrs' + (d.nmbrsKoppeling.op ? ' (' + esc(d.nmbrsKoppeling.op) +
+        (d.nmbrsKoppeling.door ? ' · ' + esc(d.nmbrsKoppeling.door) : '') + ')' : '') + '</p>' : '') +
+      '<div class="knoppen-rij mt12"><button class="knop licht klein-knop" data-actie="nmbrs-proefrun">Proefrun Nmbrs</button>' +
+      (d.nmbrsKoppeling ? '' : '<button class="knop licht klein-knop" data-actie="nmbrs-koppel">Bestaande Nmbrs-medewerker koppelen</button>') +
+      '</div>' +
+      (d.nmbrsVerwerkt ? '<p class="klaar-tekst">✓ Nmbrs verwerkt</p>'
       : '<button class="knop mt12" data-actie="verwerkt" data-welk="nmbrs">Nmbrs verwerkt</button>') + '</div>';
   }
 
@@ -585,6 +593,7 @@
       acties += '<button class="knop licht" data-actie="wijzigingslink">Wijzigingslink ' + (d.wijzigingslink.actief ? 'opnieuw ' : '') + 'sturen</button>';
       if (d.wijzigingslink.actief) acties += '<button class="knop licht" data-actie="wijzigingslink-in">Wijzigingslink intrekken</button>';
     }
+    if (d.kanUitDienst) acties += '<button class="knop licht" data-actie="uit-dienst">Uit dienst</button>';
     if (d.kanAnnuleren) acties += '<button class="knop gevaar" data-actie="annuleer">Annuleren</button>';
 
     $('detailInhoud').innerHTML =
@@ -592,6 +601,8 @@
       '<div class="kop-detail"><h1>' + esc(d.naam) + '</h1>' + badge(d.status, d.statusLabel) + '</div>' +
       (d.controle ? controleHtml(d.controle) : '') +
       (d.terug ? '<div class="test mt12">↩ Teruggestuurd (' + esc(d.terug.stappen.join(', ')) + '): ' + esc(d.terug.reden) + '</div>' : '') +
+      (d.uitDienst ? '<div class="test mt12">Uit dienst per ' + esc(d.uitDienst.op) + (d.uitDienst.reden ? ' · ' + esc(d.uitDienst.reden) : '') +
+        (d.uitDienst.nmbrs ? ' · gemeld in Nmbrs ' + esc(d.uitDienst.nmbrs) : ' · niet in Nmbrs gemeld') + '</div>' : '') +
       (d.nmbrs ? nmbrsKaartHtml(d) : '') + (d.sides ? sidesKaartHtml(d) : '') +
       (d.controle ? (d.waarschuwingenOverig ? '<div class="test mt12">⚠ ' + esc(d.waarschuwingenOverig) + '</div>' : '') :
         d.waarschuwingen ? '<div class="test mt12">⚠ ' + esc(d.waarschuwingen) + '</div>' : '') +
@@ -654,6 +665,89 @@
       document.addEventListener('keydown', toets);
       document.body.appendChild(achter);
       achter.querySelector('[data-keuze="nee"]').focus();
+    });
+  }
+
+  /** Eenvoudig informatievenster met een Sluiten-knop. */
+  function infoDialoog(titel, html) {
+    var achter = document.createElement('div');
+    achter.className = 'dialoog-achter';
+    achter.innerHTML = '<div class="dialoog groot" role="dialog" aria-modal="true"><h2>' + esc(titel) + '</h2>' + html +
+      '<div class="dialoog-knoppen"><button class="knop" data-keuze="ok">Sluiten</button></div></div>';
+    achter.addEventListener('click', function (e) { if (e.target === achter || e.target.closest('[data-keuze]')) achter.remove(); });
+    document.body.appendChild(achter);
+  }
+
+  function planHtml(stappen) {
+    return stappen.map(function (s, i) {
+      return '<div class="plan-stap"><div><strong>' + (i + 1) + '. ' + esc(s.stap) + '</strong> <span class="klein">' + esc(s.methode) + ' ' +
+        esc(s.pad) + '</span></div>' + (s.open && s.open.length ? '<div class="fout">Open: ' + esc(s.open.join(' ')) + '</div>' : '') +
+        '<pre class="plan-json">' + esc(JSON.stringify(s.body, null, 2)) + '</pre></div>';
+    }).join('');
+  }
+
+  function proefrunHtml(r) {
+    var open = r.stappen.reduce(function (n, s) { return n + (s.open ? s.open.length : 0); }, 0);
+    return '<p>BSN en IBAN zijn gemaskeerd. Schrijven naar Nmbrs staat <strong>' + (r.schrijvenAan ? 'AAN' : 'uit') + '</strong>.' +
+      (r.sjabloon ? ' Sjabloon: ' + esc(r.sjabloon) + '.' : '') + ' Echt aanmaken is nog niet gebouwd.</p>' +
+      (r.waarschuwingen.length ? '<div class="test">' + r.waarschuwingen.map(esc).join('<br>') + '</div>' : '') +
+      '<p class="klein">' + r.stappen.length + ' stappen, ' + open + ' open punt(en).</p>' + planHtml(r.stappen);
+  }
+
+  /** Kies een bestaande Nmbrs-medewerker om te koppelen. Promise<employeeId | null>. */
+  function koppelDialoog(kandidaten) {
+    return new Promise(function (klaar) {
+      var achter = document.createElement('div');
+      achter.className = 'dialoog-achter';
+      achter.innerHTML = '<div class="dialoog groot" role="dialog" aria-modal="true"><h2>Bestaande Nmbrs-medewerker koppelen</h2>' +
+        (kandidaten.length ? '<p>Gevonden op achternaam + geboortedatum (of BSN). Kies de juiste en bevestig. Er wordt niets in Nmbrs aangemaakt.</p>' +
+          kandidaten.map(function (k, i) {
+            return '<label class="vink-regel"><input type="radio" name="kand" value="' + esc(k.employeeId) + '"' + (i === 0 ? ' checked' : '') + '> ' +
+              esc(k.naam) + ' · geb. ' + esc(k.geboortedatum) + ' · personeelsnr. ' + esc(String(k.nummer)) + ' · ' + esc(k.soort) +
+              (k.bsnGelijk ? ' · <strong>BSN komt overeen</strong>' : '') + (k.naamGelijk ? '' : ' · naam/geboortedatum wijken af') + '</label>';
+          }).join('') : '<p>Geen Nmbrs-medewerker gevonden met dezelfde achternaam en geboortedatum (of BSN).</p>') +
+        '<div class="dialoog-knoppen"><button class="knop licht" data-keuze="nee">Annuleren</button>' +
+        (kandidaten.length ? '<button class="knop" data-keuze="ja">Koppelen</button>' : '') + '</div></div>';
+      achter.addEventListener('click', function (e) {
+        if (e.target === achter) { achter.remove(); return klaar(null); }
+        var k = e.target.closest('[data-keuze]');
+        if (!k) return;
+        var gekozen = achter.querySelector('input[name=kand]:checked');
+        achter.remove();
+        klaar(k.dataset.keuze === 'ja' && gekozen ? gekozen.value : null);
+      });
+      document.body.appendChild(achter);
+    });
+  }
+
+  /** Uit dienst: einddatum + reden (lijst uit Nmbrs). Promise<{datum, code, reden} | null>. */
+  function uitDienstDialoog() {
+    return new Promise(function (klaar) {
+      var achter = document.createElement('div');
+      achter.className = 'dialoog-achter';
+      achter.innerHTML = '<div class="dialoog" role="dialog" aria-modal="true"><h2>Uit dienst</h2>' +
+        '<p>Zet de medewerker uit dienst. Het Sides-nummer komt daarna vrij voor hergebruik.</p>' +
+        '<label for="uDatum">Laatste werkdag (einddatum)</label><input id="uDatum" type="date">' +
+        '<label for="uReden">Reden (Nmbrs)</label><select id="uReden"><option value="">Laden…</option></select>' +
+        '<div class="fout" id="uFout"></div><div class="dialoog-knoppen"><button class="knop licht" data-keuze="nee">Annuleren</button>' +
+        '<button class="knop gevaar" data-keuze="ja">Uit dienst zetten</button></div></div>';
+      var sel = achter.querySelector('#uReden');
+      roep('nmbrsRedenen', [], function (r) {
+        sel.innerHTML = '<option value="">' + (r.lijst.length ? 'Kies een reden' : 'Geen lijst uit Nmbrs (' + esc(r.fout || 'niet bereikbaar') + ')') + '</option>' +
+          r.lijst.map(function (x) { return '<option value="' + esc(String(x.code)) + '">' + esc(x.code + ' – ' + x.reden) + '</option>'; }).join('');
+      }, function () { sel.innerHTML = '<option value="">Geen lijst uit Nmbrs</option>'; }, true);
+      achter.addEventListener('click', function (e) {
+        if (e.target === achter) { achter.remove(); return klaar(null); }
+        var k = e.target.closest('[data-keuze]');
+        if (!k) return;
+        if (k.dataset.keuze === 'nee') { achter.remove(); return klaar(null); }
+        var datum = achter.querySelector('#uDatum').value;
+        if (!datum) { achter.querySelector('#uFout').textContent = 'Kies een einddatum.'; return; }
+        var opt = sel.options[sel.selectedIndex];
+        achter.remove();
+        klaar({ datum: datum, code: sel.value, reden: sel.value ? opt.textContent.replace(/^\S+ – /, '') : '' });
+      });
+      document.body.appendChild(achter);
     });
   }
 
@@ -835,6 +929,37 @@
           /niet verstuurd/.test(mail));
         laad(true);
       }, herstelV);
+      return;
+    }
+    if (actie === 'nmbrs-proefrun') {
+      var herstelP = bezig(el, 'Proefrun…');
+      roep('nmbrsProefrun', [id], function (r) { herstelP(); infoDialoog('Proefrun Nmbrs (er gaat niets naar Nmbrs)', proefrunHtml(r)); }, herstelP);
+      return;
+    }
+    if (actie === 'nmbrs-koppel') {
+      var herstelK = bezig(el, 'Zoeken in Nmbrs…');
+      roep('nmbrsKandidaten', [id], function (r) {
+        herstelK();
+        koppelDialoog(r.kandidaten).then(function (employeeId) {
+          if (!employeeId) return;
+          var herstelK2 = bezig(el, 'Koppelen…');
+          roep('nmbrsKoppel', [id, employeeId], function (d) { toonDetail(d); toon('Gekoppeld aan de bestaande Nmbrs-medewerker.'); }, herstelK2);
+        });
+      }, herstelK);
+      return;
+    }
+    if (actie === 'uit-dienst') {
+      uitDienstDialoog().then(function (k) {
+        if (!k) return;
+        var herstelU = bezig(el);
+        roep('uitDienst', [id, k.datum, k.code, k.reden], function (d) {
+          toonDetail(d); laad(true);
+          var n = d.uitDienstNmbrs || {};
+          toon('Uit dienst gezet.' + (n.modus === 'gemeld' ? ' Gemeld in Nmbrs.' : n.modus === 'proefrun' ? ' Nmbrs: alleen proefrun (schrijven staat uit).' :
+            ' Niet gekoppeld aan Nmbrs.') + ' Het Sides-nummer is weer vrij.');
+          if (n.modus === 'proefrun' && n.plan) infoDialoog('Proefrun uit dienst (er is niets naar Nmbrs gestuurd)', planHtml(n.plan));
+        }, herstelU);
+      });
       return;
     }
     if (actie === 'sides-nummer') {
