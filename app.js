@@ -690,6 +690,7 @@
       return '<div class="plan-stap"><div><strong>' + (i + 1) + '. ' + esc(s.stap) + (s.gedaan ? ' ✓ al gedaan' : '') +
         '</strong> <span class="klein">' + esc(s.methode) + ' ' +
         esc(s.pad) + '</span></div>' + (s.open && s.open.length ? '<div class="fout">Open: ' + esc(s.open.join(' ')) + '</div>' : '') +
+        (s.letOp && s.letOp.length ? '<div class="klein">Let op: ' + esc(s.letOp.join(' ')) + '</div>' : '') +
         '<pre class="plan-json">' + esc(JSON.stringify(s.body, null, 2)) + '</pre></div>';
     }).join('');
   }
@@ -700,6 +701,9 @@
       (r.sjabloon ? ' Sjabloon: ' + esc(r.sjabloon) + '.' : '') + (r.soort ? ' Soort: ' + esc(r.soort) + '.' : '') + '</p>' +
       (r.template ? '<div class="test mt12">Default medewerker: <strong>' + esc(r.template.naam) + '</strong> · template-ID ' +
         esc(r.template.id) + '</div>' : '') +
+      (r.nationaliteit ? '<div class="test mt12">Nationaliteit: <strong>' + esc(r.nationaliteit.invoer || '–') + '</strong> → ' +
+        (r.nationaliteit.code ? '<strong>' + esc(r.nationaliteit.code) + '</strong>' : '<span class="fout">niet herkend</span>') +
+        ' · Geboorteland: ' + esc(r.geboorteland.invoer || '–') + ' → ' + esc(r.geboorteland.code || 'leeg') + '</div>' : '') +
       (r.hervatten ? '<div class="test mt12">Deze medewerker is al aangemaakt; alleen de stappen zonder ✓ worden nog uitgevoerd.</div>' : '') +
       (r.waarschuwingen.length ? '<div class="fout mt12"><strong>Niet aanmaken:</strong><br>' + r.waarschuwingen.map(esc).join('<br>') + '</div>' : '') +
       '<p class="klein">' + r.stappen.length + ' stappen, ' + open + ' open punt(en).</p>' + planHtml(r.stappen);
