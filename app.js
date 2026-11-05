@@ -704,6 +704,8 @@
       (r.nationaliteit ? '<div class="test mt12">Nationaliteit: <strong>' + esc(r.nationaliteit.invoer || '–') + '</strong> → ' +
         (r.nationaliteit.code ? '<strong>' + esc(r.nationaliteit.code) + '</strong>' : '<span class="fout">niet herkend</span>') +
         ' · Geboorteland: ' + esc(r.geboorteland.invoer || '–') + ' → ' + esc(r.geboorteland.code || 'leeg') + '</div>' : '') +
+      '<div class="test mt12">Periode (loonheffing, SVW, functie): <strong>' + esc(r.periode || 'onbekend') + '</strong>' +
+        ' · Jaarloon BT: <strong>' + (r.jaarloonBt ? '€ ' + esc(r.jaarloonBt) : 'ontbreekt') + '</strong></div>' +
       (r.hervatten ? '<div class="test mt12">Deze medewerker is al aangemaakt; alleen de stappen zonder ✓ worden nog uitgevoerd.</div>' : '') +
       (r.waarschuwingen.length ? '<div class="fout mt12"><strong>Niet aanmaken:</strong><br>' + r.waarschuwingen.map(esc).join('<br>') + '</div>' : '') +
       '<p class="klein">' + r.stappen.length + ' stappen, ' + open + ' open punt(en).</p>' + planHtml(r.stappen);
