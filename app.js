@@ -708,13 +708,9 @@
         ' · Jaarloon BT: <strong>' + (r.jaarloonBt ? '€ ' + esc(r.jaarloonBt) : 'ontbreekt') + '</strong></div>' +
       (r.inschaling ? (r.inschaling.fout ? '<div class="fout mt12">Inschaling niet bepaald: ' + esc(r.inschaling.fout) + '</div>' :
         '<div class="test mt12">Inschaling: <strong>' + esc(r.inschaling.tabel) + ' · ' + esc(r.inschaling.schaal) + ' · trede ' +
-        esc(r.inschaling.trede) + '</strong> (leeftijd ' + esc(r.inschaling.leeftijd) + ')<br>Bedrag trede: ' +
-        (r.inschaling.bedrag != null ? '<strong>€ ' + esc(r.inschaling.bedrag.toFixed(2)) + '</strong> (' + esc(r.inschaling.bedragBron) + ')' : 'onbekend') +
-        ' · ons basisuurloon: <strong>€ ' + esc((r.inschaling.onsUur || 0).toFixed(2)) + '</strong>' +
-        (r.inschaling.bedrag != null && r.inschaling.onsUur && Math.abs(r.inschaling.bedrag - r.inschaling.onsUur) > 0.005 ?
-          ' <span class="fout">wijkt af (Banvo bepaalt het bedrag via de tabel)</span>' : '') +
-        '<br>Trede-verhoging: ' + (r.inschaling.verhoging ? esc(r.inschaling.verhoging.year + '-' + r.inschaling.verhoging.period) : 'nee') +
-        ' <span class="klein">(' + esc(r.inschaling.patroon) + ')</span></div>') : '') +
+        esc(r.inschaling.trede) + '</strong> (leeftijd ' + esc(r.inschaling.leeftijd) + ') · <strong>€ ' +
+        esc((r.inschaling.bedrag || 0).toFixed(2)) + '</strong> per uur<br><span class="klein">Tabelversie ' + esc(r.inschaling.versie) +
+        '</span></div>') : '') +
       (r.hervatten ? '<div class="test mt12">Deze medewerker is al aangemaakt; alleen de stappen zonder ✓ worden nog uitgevoerd.</div>' : '') +
       (r.waarschuwingen.length ? '<div class="fout mt12"><strong>Niet aanmaken:</strong><br>' + r.waarschuwingen.map(esc).join('<br>') + '</div>' : '') +
       '<p class="klein">' + r.stappen.length + ' stappen, ' + open + ' open punt(en).</p>' + planHtml(r.stappen);
