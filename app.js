@@ -578,8 +578,27 @@
     return '<div class="kaart werkkaart"><h2>Sides</h2><dl>' + d.sides.map(function (v) { return kopieerRij(v[0], v[1]); }).join('') +
       '</dl>' + (d.sidesNummer && d.sidesNummer.wijzigbaar ?
         '<button class="knop licht klein-knop" data-actie="sides-nummer">Personeelsnummer wijzigen</button>' : '') +
+      sidesOpdrachtHtml(d) +
       (d.sidesVerwerkt ? '<p class="klaar-tekst">✓ Sides verwerkt</p>'
       : '<button class="knop mt12" data-actie="verwerkt" data-welk="sides">Sides verwerkt</button>') + '</div>';
+  }
+
+  var SIDES_OPDRACHT_LABEL = { gestart: 'gestart, wacht op GitHub', bezig: 'bezig in GitHub', 'proef klaar':
+    'proef klaar: screenshots gemaild naar info@ en in de Drive-map', klaar: 'in Sides gezet', fout: 'niet gelukt' };
+
+  /** Knop "In Sides zetten" (GitHub Action) en de stand van de laatste opdracht. */
+  function sidesOpdrachtHtml(d) {
+    var o = d.sidesOpdracht;
+    if (!o) return '';
+    var toonKnop = o.modus !== 'uit' && !(d.sidesVerwerkt && o.modus === 'aan');
+    var knop = toonKnop ? '<button class="knop licht klein-knop" data-actie="sides-inzetten"' + (o.kanNiet ? ' disabled' : '') + '>' +
+      (o.modus === 'proef' ? 'In Sides zetten (proef)' : 'In Sides zetten') + '</button>' : '';
+    var vernieuw = o.loopt ? '<button class="knop licht klein-knop" data-actie="sides-vernieuw">Vernieuwen</button>' : '';
+    var stand = o.status ? '<p class="' + (o.status === 'fout' ? 'fout' : 'klein') + '">Automatisch' +
+      (o.opdrachtModus === 'proef' ? ' (proef)' : '') + ': ' + esc(SIDES_OPDRACHT_LABEL[o.status] || o.status) +
+      (o.op ? ' · ' + esc(o.op) : '') + (o.melding ? ' · ' + esc(o.melding) : '') + '</p>' : '';
+    var waarom = toonKnop && o.kanNiet && !o.loopt ? '<p class="klein">' + esc(o.kanNiet) + '</p>' : '';
+    return (knop || vernieuw ? '<div class="knoppen-rij mt12">' + knop + vernieuw + '</div>' : '') + waarom + stand;
   }
 
   function toonDetail(d, alOnthouden) {
@@ -978,6 +997,27 @@
           /niet verstuurd/.test(mail));
         laad(true);
       }, herstelV);
+      return;
+    }
+    if (actie === 'sides-inzetten') {
+      var dS = (detailGeheugen[id] || {}).d;
+      var proef = !!(dS && dS.sidesOpdracht && dS.sidesOpdracht.modus === 'proef');
+      bevestig(proef ? 'Proef in Sides' : 'In Sides zetten', proef ?
+        'GitHub vult Sides in en maakt screenshots, maar slaat niets op. De screenshots komen per mail naar info@ en in de Drive-map.' :
+        'GitHub zet de medewerker in Sides (stap 1 en 2), leest alles terug en zet daarna "Sides verwerkt" (mail met inkloknummer). ' +
+        'Bij een fout wordt niets gezet en krijgt info@ een mail.', proef ? 'Proef starten' : 'In Sides zetten').then(function (ja) {
+        if (!ja) return;
+        var herstelS = bezig(el, 'Starten…');
+        roep('sidesInZetten', [id], function (d) {
+          toonDetail(d);
+          toon('Gestart in GitHub. Over een paar minuten klaar; klik dan op Vernieuwen.');
+        }, herstelS);
+      });
+      return;
+    }
+    if (actie === 'sides-vernieuw') {
+      var herstelR = bezig(el, 'Vernieuwen…');
+      roep('detail', [id], function (d) { toonDetail(d); }, herstelR);
       return;
     }
     if (actie === 'nmbrs-proefrun') {
