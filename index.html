@@ -10,11 +10,11 @@
 <meta name="theme-color" content="#0d0d0d">
 <link rel="icon" type="image/png" sizes="64x64" href="favicon.png">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
-<link rel="stylesheet" href="stijl.css?v=1793944634">
+<link rel="stylesheet" href="stijl.css?v=1794066664">
 </head>
 <body>
 <section id="login" hidden>
-  <img class="logo" src="pam.png?v=1793944634" width="120" height="120" alt="Pasta &amp; More">
+  <img class="logo" src="pam.png?v=1794066664" width="120" height="120" alt="Pasta &amp; More">
   <h1>Personeelsflow</h1>
   <form id="loginEmail" novalidate>
     <p>Log in met je e-mailadres. Je krijgt een code van 6 cijfers per mail.</p>
@@ -34,7 +34,7 @@
 </section>
 
 <main id="app" hidden>
-  <img class="logo" src="pam.png?v=1793944634" width="120" height="120" alt="Pasta &amp; More">
+  <img class="logo" src="pam.png?v=1794066664" width="120" height="120" alt="Pasta &amp; More">
   <div class="kopbalk"><h1>Personeelsflow</h1>
     <div class="gebruiker"><div id="gebruiker"></div><button class="tekst-knop" id="uitloggen">Uitloggen</button></div></div>
   <p class="sub" id="telling">Laden…</p>
@@ -45,9 +45,17 @@
 
   <form class="kaart" id="formulier" hidden novalidate>
     <h2>Nieuwe medewerker</h2>
-    <label for="f-naam">Naam</label>
-    <input id="f-naam" autocomplete="off" autocapitalize="words">
-    <div class="fout" data-fout="naam"></div>
+    <label for="f-voornaam">Voornaam</label>
+    <input id="f-voornaam" autocomplete="off" autocapitalize="words">
+    <div class="fout" data-fout="voornaam"></div>
+
+    <label for="f-tussenvoegsel">Tussenvoegsel <span class="klein">(optioneel)</span></label>
+    <input id="f-tussenvoegsel" autocomplete="off" autocapitalize="off" placeholder="bijv. de, van der">
+    <div class="fout" data-fout="tussenvoegsel"></div>
+
+    <label for="f-achternaam">Achternaam</label>
+    <input id="f-achternaam" autocomplete="off" autocapitalize="words">
+    <div class="fout" data-fout="achternaam"></div>
 
     <label for="f-leeftijd">Leeftijd</label>
     <input id="f-leeftijd" type="number" inputmode="numeric" min="15" max="99">
@@ -67,6 +75,11 @@
     <label for="f-start">Startdatum</label>
     <input id="f-start" type="date">
     <div class="fout" data-fout="startdatum"></div>
+
+    <label for="f-sides">Sides-personeelsnummer</label>
+    <input id="f-sides" type="number" inputmode="numeric" min="1">
+    <div class="klein">Standaard het volgende nummer. Een vrijgekomen nummer mag ook.</div>
+    <div class="fout" data-fout="sidesNummer"></div>
 
     <div id="voorbeeld" hidden>
       <div class="bedragen">
@@ -103,8 +116,8 @@
 
 <div id="melding" role="status"></div>
 
-<script src="config.js?v=1793944634"></script>
-<script src="adres.js?v=1793944634"></script>
-<script src="app.js?v=1793944634"></script>
+<script src="config.js?v=1794066664"></script>
+<script src="adres.js?v=1794066664"></script>
+<script src="app.js?v=1794066664"></script>
 </body>
 </html>

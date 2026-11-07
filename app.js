@@ -347,6 +347,7 @@
   function toonLijst(o, uitCache) {
     if (!uitCache) markeerVoorlopig(false); // verse gegevens van de server
     laatsteLijst = o.medewerkers;
+    if (!uitCache) laatsteOverzicht = o;
     if (o.banvo) toonBanvo(o.banvo);
     if (o.sidesBijwerken) toonSidesBijwerken(o.sidesBijwerken);
     (function () {
@@ -362,7 +363,8 @@
         return '<button class="item' + (m.status === 'Geannuleerd' || m.status === 'Uit dienst' ? ' uit' : '') + '" data-id="' + esc(m.id) + '">' +
           '<div class="wie"><div class="naam">' + esc(m.naam) + '</div>' +
           '<div class="wanneer">Start ' + esc(m.startdatum) + '</div>' +
-          (m.waarschuwingen ? '<div class="let">⚠ ' + esc(m.waarschuwingen) + '</div>' : '') + '</div>' +
+          (m.waarschuwingen ? '<div class="let">⚠ ' + esc(m.waarschuwingen) + '</div>' : '') +
+          (m.sidesBijwerken ? '<div class="let">⚠ Sides bijwerken (naam of kostprijs)</div>' : '') + '</div>' +
           badge(m.status, m.statusLabel) + '</button>';
       }).join('');
     })();
@@ -375,7 +377,10 @@
 
   // ---------- Formulier ----------
   function resetFormulier() {
-    ['f-naam', 'f-leeftijd', 'f-email'].forEach(function (id) { $(id).value = ''; });
+    ['f-voornaam', 'f-tussenvoegsel', 'f-achternaam', 'f-leeftijd', 'f-email'].forEach(function (id) { $(id).value = ''; });
+    var voorstel = laatsteOverzicht && laatsteOverzicht.volgendSidesNummer ? String(laatsteOverzicht.volgendSidesNummer) : '';
+    $('f-sides').value = voorstel;
+    $('f-sides').dataset.standaard = voorstel;
     $('f-start').value = eersteVanDezeMaand();
     zetVervoer('scooter');
     toonFouten({});
@@ -400,7 +405,7 @@
     resetFormulier();
     $('formulier').hidden = false;
     $('nieuwKnop').hidden = true;
-    $('f-naam').focus();
+    $('f-voornaam').focus();
   });
 
   $('annuleerForm').addEventListener('click', function () {
@@ -437,7 +442,11 @@
     e.preventDefault();
     var herstelStart = bezig($('startKnop'), 'Bezig…');
     var invoer = {
-      naam: $('f-naam').value,
+      voornaam: $('f-voornaam').value,
+      tussenvoegsel: $('f-tussenvoegsel').value,
+      achternaam: $('f-achternaam').value,
+      // Ongewijzigd voorstel: leeg sturen, dan kiest de server het volgende vrije nummer (ook als iemand net eerder startte).
+      sidesNummer: $('f-sides').value.trim() === $('f-sides').dataset.standaard ? '' : $('f-sides').value.trim(),
       leeftijd: Number($('f-leeftijd').value),
       email: $('f-email').value,
       vervoermiddel: vervoer,
@@ -447,14 +456,16 @@
       herstelStart();
       if (!r.ok) {
         toonFouten(r.fouten || {});
-        var eerste = { naam: 'f-naam', leeftijd: 'f-leeftijd', email: 'f-email', startdatum: 'f-start' }[Object.keys(r.fouten || {})[0]];
+        var eerste = { voornaam: 'f-voornaam', tussenvoegsel: 'f-tussenvoegsel', achternaam: 'f-achternaam', leeftijd: 'f-leeftijd',
+          email: 'f-email', startdatum: 'f-start', sidesNummer: 'f-sides' }[Object.keys(r.fouten || {})[0]];
         if (eerste) $(eerste).focus();
         return;
       }
       $('formulier').hidden = true;
       $('nieuwKnop').hidden = false;
-      if (r.mailFout) toon(r.mailFout, true);
-      else toon(r.medewerker.naam + ' is uitgenodigd.');
+      if (r.mailFout) toon(r.mailFout + (r.sidesMelding ? ' ' + r.sidesMelding : ''), true);
+      else if (r.sidesMelding) toon(r.medewerker.naam + ' is uitgenodigd. ' + r.sidesMelding, /niet gestart/.test(r.sidesMelding));
+      else toon(r.medewerker.naam + ' is uitgenodigd. Sides-opdracht gestart (GitHub).');
       laad();
     }, function () {
       herstelStart();
@@ -473,6 +484,7 @@
   var detailGeheugen = {};
   var fotoGeheugen = {};
   var laatsteLijst = [];
+  var laatsteOverzicht = null; // voor het voorgestelde Sides-nummer in het startformulier
 
   function onthoudDetail(d, fotosOpnieuw) {
     detailGeheugen[d.id] = { d: d, op: Date.now() };
@@ -578,23 +590,43 @@
     return '<div class="kaart werkkaart"><h2>Sides</h2><dl>' + d.sides.map(function (v) { return kopieerRij(v[0], v[1]); }).join('') +
       '</dl>' + (d.sidesNummer && d.sidesNummer.wijzigbaar ?
         '<button class="knop licht klein-knop" data-actie="sides-nummer">Personeelsnummer wijzigen</button>' : '') +
-      sidesOpdrachtHtml(d) +
-      (d.sidesVerwerkt ? '<p class="klaar-tekst">✓ Sides verwerkt</p>'
-      : '<button class="knop mt12" data-actie="verwerkt" data-welk="sides">Sides verwerkt</button>') + '</div>';
+      sidesMeldingenHtml(d) + sidesOpdrachtHtml(d) +
+      (d.sidesOpdracht && d.sidesOpdracht.inactief ? '<p class="klaar-tekst">✓ In Sides op inactief gezet (' + esc(d.sidesOpdracht.inactief) + ')</p>' :
+        d.sidesVerwerkt ? '<p class="klaar-tekst">✓ Sides verwerkt</p>' + (d.status === 'Geannuleerd' && d.sidesOpdracht &&
+          d.sidesOpdracht.modus !== 'uit' && !d.sidesOpdracht.loopt ?
+          '<button class="knop licht klein-knop mt12" data-actie="sides-inactief">Op inactief zetten in Sides' +
+          (d.sidesOpdracht.modus === 'proef' ? ' (proef)' : '') + '</button>' : '')
+        : d.status === 'Geannuleerd' ? '' : '<button class="knop mt12" data-actie="verwerkt" data-welk="sides">Sides verwerkt</button>') + '</div>';
+  }
+
+  /** Meldingen "Sides bijwerken": naam uit het formulier of kostprijs (bijv. andere leeftijd) wijkt af van Sides. */
+  function sidesMeldingenHtml(d) {
+    var uit = '';
+    if (d.sidesNaam) uit += '<div class="test mt12">⚠ Sides-naam bijwerken: in Sides staat <strong>' + esc(d.sidesNaam.inSides) +
+      '</strong>, volgens het formulier <strong>' + esc(d.sidesNaam.formulier) + '</strong>.' +
+      '<div class="knoppen-rij mt12"><button class="knop licht klein-knop" data-actie="sides-bijgewerkt" data-welk="naam">' +
+      'Naam bijgewerkt in Sides</button></div></div>';
+    if (d.sidesKostprijs) uit += '<div class="test mt12">⚠ Sides-kostprijs bijwerken: in Sides staat <strong>€ ' +
+      esc(d.sidesKostprijs.inSides) + '</strong> per uur, nu hoort het <strong>€ ' + esc(d.sidesKostprijs.nu) + '</strong> te zijn ' +
+      '(bijv. door een andere leeftijd).' +
+      '<div class="knoppen-rij mt12"><button class="knop licht klein-knop" data-actie="sides-bijgewerkt" data-welk="kostprijs">' +
+      'Kostprijs bijgewerkt in Sides</button></div></div>';
+    return uit;
   }
 
   var SIDES_OPDRACHT_LABEL = { gestart: 'gestart, wacht op GitHub', bezig: 'bezig in GitHub', 'proef klaar':
-    'proef klaar: screenshots gemaild naar info@ en in de Drive-map', klaar: 'in Sides gezet', fout: 'niet gelukt' };
+    'proef klaar: screenshots gemaild naar info@ en in de Drive-map', klaar: 'klaar', fout: 'niet gelukt' };
 
   /** Knop "In Sides zetten" (GitHub Action) en de stand van de laatste opdracht. */
   function sidesOpdrachtHtml(d) {
     var o = d.sidesOpdracht;
     if (!o) return '';
-    var toonKnop = o.modus !== 'uit' && !(d.sidesVerwerkt && o.modus === 'aan');
+    var toonKnop = o.modus !== 'uit' && !(d.sidesVerwerkt && o.modus === 'aan') && d.status !== 'Geannuleerd';
     var knop = toonKnop ? '<button class="knop licht klein-knop" data-actie="sides-inzetten"' + (o.kanNiet ? ' disabled' : '') + '>' +
       (o.modus === 'proef' ? 'In Sides zetten (proef)' : 'In Sides zetten') + '</button>' : '';
     var vernieuw = o.loopt ? '<button class="knop licht klein-knop" data-actie="sides-vernieuw">Vernieuwen</button>' : '';
     var stand = o.status ? '<p class="' + (o.status === 'fout' ? 'fout' : 'klein') + '">Automatisch' +
+      (o.soort === 'inactief' ? ' inactief zetten' : '') +
       (o.opdrachtModus === 'proef' ? ' (proef)' : '') + ': ' + esc(SIDES_OPDRACHT_LABEL[o.status] || o.status) +
       (o.op ? ' · ' + esc(o.op) : '') + (o.melding ? ' · ' + esc(o.melding) : '') + '</p>' : '';
     var waarom = toonKnop && o.kanNiet && !o.loopt ? '<p class="klein">' + esc(o.kanNiet) + '</p>' : '';
@@ -999,6 +1031,27 @@
       }, herstelV);
       return;
     }
+    if (actie === 'sides-bijgewerkt') {
+      var welkB = el.dataset.welk;
+      bevestig(welkB === 'naam' ? 'Naam bijgewerkt in Sides?' : 'Kostprijs bijgewerkt in Sides?',
+        'Alleen bevestigen als je het in Sides al hebt aangepast. De melding verdwijnt dan.', 'Ja, bijgewerkt').then(function (ja) {
+        if (!ja) return;
+        var herstelB = bezig(el);
+        roep('sidesKaartBijgewerkt', [id, welkB], function (d) { toonDetail(d); toon('Vastgelegd.'); laad(true); }, herstelB);
+      });
+      return;
+    }
+    if (actie === 'sides-inactief') {
+      var dI = (detailGeheugen[id] || {}).d;
+      var proefI = !!(dI && dI.sidesOpdracht && dI.sidesOpdracht.modus === 'proef');
+      bevestig('Op inactief zetten in Sides', proefI ? 'Proef: GitHub zet "Actief" op Nee en maakt een screenshot, maar slaat niets op.' :
+        'GitHub zet de medewerker in Sides op inactief (Actief: Nee) en leest het terug.', proefI ? 'Proef starten' : 'Inactief zetten').then(function (ja) {
+        if (!ja) return;
+        var herstelI = bezig(el, 'Starten…');
+        roep('sidesInactief', [id], function (d) { toonDetail(d); toon('Gestart in GitHub. Klik over een paar minuten op Vernieuwen.'); }, herstelI);
+      });
+      return;
+    }
     if (actie === 'sides-inzetten') {
       var dS = (detailGeheugen[id] || {}).d;
       var proef = !!(dS && dS.sidesOpdracht && dS.sidesOpdracht.modus === 'proef');
@@ -1191,7 +1244,9 @@
         'Annuleren', true, 'Niet annuleren').then(function (ja) {
         if (!ja) return;
         var herstelAn = bezig(el);
-        roep('annuleren', [id], function (d) { toonDetail(d); toon('Geannuleerd.'); laad(true); }, herstelAn);
+        roep('annuleren', [id], function (d) {
+          toonDetail(d); toon('Geannuleerd.' + (d.sidesMelding ? ' ' + d.sidesMelding : ''), /niet gestart|zelf/.test(d.sidesMelding || '')); laad(true);
+        }, herstelAn);
       });
     }
   });
