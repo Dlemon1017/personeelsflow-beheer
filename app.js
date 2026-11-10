@@ -579,9 +579,10 @@
         'Ontbrekend: ' + esc(a.ontbrekend.join(', ')) + '.</div>' : '') +
       '<div class="knoppen-rij mt12"><button class="knop licht klein-knop" data-actie="nmbrs-proefrun">Proefrun Nmbrs</button>' +
       (onvolledig ? '<button class="knop klein-knop" data-actie="nmbrs-aanmaken">Ontbrekende stappen afmaken</button>' : '') +
-      (d.nmbrsKoppeling ? '' : '<button class="knop klein-knop" data-actie="nmbrs-aanmaken">Aanmaken in Nmbrs</button>' +
+      (d.nmbrsKoppeling ? '' : '<button class="knop klein-knop" data-actie="nmbrs-aanmaken"' + (d.nmbrsNietAanmaken ? ' disabled' : '') +
+        '>Aanmaken in Nmbrs</button>' +
         '<button class="knop licht klein-knop" data-actie="nmbrs-koppel">Bestaande Nmbrs-medewerker koppelen</button>') +
-      '</div>' +
+      '</div>' + (d.nmbrsNietAanmaken && !d.nmbrsKoppeling ? '<p class="fout">' + esc(d.nmbrsNietAanmaken) + '</p>' : '') +
       (d.nmbrsVerwerkt ? '<p class="klaar-tekst">✓ Nmbrs verwerkt</p>'
       : '<button class="knop mt12" data-actie="verwerkt" data-welk="nmbrs">Nmbrs verwerkt</button>') + '</div>';
   }
@@ -633,6 +634,24 @@
     return (knop || vernieuw ? '<div class="knoppen-rij mt12">' + knop + vernieuw + '</div>' : '') + waarom + stand;
   }
 
+  // Zolang een Sides-opdracht loopt (wacht op GitHub / bezig): de detailpagina elke 20 s zelf verversen, maximaal
+  // 20 minuten, alleen als die medewerker open staat en het tabblad zichtbaar is.
+  var sidesTimer = null, sidesSinds = {};
+  function planSidesVerversen(d) {
+    clearTimeout(sidesTimer);
+    sidesTimer = null;
+    var o = d.sidesOpdracht;
+    if (!o || !o.loopt) { delete sidesSinds[d.id]; return; }
+    sidesSinds[d.id] = sidesSinds[d.id] || Date.now();
+    if (Date.now() - sidesSinds[d.id] > 20 * 60 * 1000) return; // daarna weer met de hand (Vernieuwen)
+    sidesTimer = setTimeout(function () {
+      var nogOpen = function () { return $('detail').classList.contains('open') && $('detailInhoud').dataset.id === d.id; };
+      if (!nogOpen()) return;
+      if (document.hidden) { planSidesVerversen(d); return; }
+      roep('detail', [d.id], function (n) { if (nogOpen()) toonDetail(n); }, function () { if (nogOpen()) planSidesVerversen(d); }, true);
+    }, 20000);
+  }
+
   function toonDetail(d, alOnthouden) {
     if (!alOnthouden) onthoudDetail(d, true); // aangeroepen na een actie
     var acties = '';
@@ -671,6 +690,7 @@
       '<div class="kaart"><h2>Verloop</h2>' + lijstHtml(d.tijdlijn) + '</div>' +
       (acties ? '<div class="acties">' + acties + '</div>' : '');
     $('detailInhoud').dataset.id = d.id;
+    planSidesVerversen(d);
     if (d.vergelijk) {
       var zetFotos = function (fotos) {
         var vak = document.querySelector('#detailInhoud .miniaturen');
@@ -755,7 +775,7 @@
       (r.nationaliteit ? '<div class="test mt12">Nationaliteit: <strong>' + esc(r.nationaliteit.invoer || '–') + '</strong> → ' +
         (r.nationaliteit.code ? '<strong>' + esc(r.nationaliteit.code) + '</strong>' : '<span class="fout">niet herkend</span>') +
         ' · Geboorteland: ' + esc(r.geboorteland.invoer || '–') + ' → ' + esc(r.geboorteland.code || 'leeg') + '</div>' : '') +
-      '<div class="test mt12">Periode (loonheffing, SVW, functie): <strong>' + esc(r.periode || 'onbekend') + '</strong>' +
+      '<div class="test mt12">Periode (loonheffing, SVW, functie, adres): <strong>' + esc(r.periode || 'onbekend') + '</strong>' +
         ' · Jaarloon BT: <strong>' + (r.jaarloonBt ? '€ ' + esc(r.jaarloonBt) : 'ontbreekt') + '</strong></div>' +
       (r.inschaling ? (r.inschaling.fout ? '<div class="fout mt12">Inschaling niet bepaald: ' + esc(r.inschaling.fout) + '</div>' :
         '<div class="test mt12">Inschaling: <strong>' + esc(r.inschaling.tabel) + ' · ' + esc(r.inschaling.schaal) + ' · trede ' +
@@ -1048,7 +1068,7 @@
         'GitHub zet de medewerker in Sides op inactief (Actief: Nee) en leest het terug.', proefI ? 'Proef starten' : 'Inactief zetten').then(function (ja) {
         if (!ja) return;
         var herstelI = bezig(el, 'Starten…');
-        roep('sidesInactief', [id], function (d) { toonDetail(d); toon('Gestart in GitHub. Klik over een paar minuten op Vernieuwen.'); }, herstelI);
+        roep('sidesInactief', [id], function (d) { toonDetail(d); toon('Gestart in GitHub. De status ververst vanzelf.'); }, herstelI);
       });
       return;
     }
@@ -1063,7 +1083,7 @@
         var herstelS = bezig(el, 'Starten…');
         roep('sidesInZetten', [id], function (d) {
           toonDetail(d);
-          toon('Gestart in GitHub. Over een paar minuten klaar; klik dan op Vernieuwen.');
+          toon('Gestart in GitHub. Over een paar minuten klaar; de status ververst vanzelf.');
         }, herstelS);
       });
       return;
@@ -1075,7 +1095,11 @@
     }
     if (actie === 'nmbrs-proefrun') {
       var herstelP = bezig(el, 'Proefrun…');
-      roep('nmbrsProefrun', [id], function (r) { herstelP(); infoDialoog('Proefrun Nmbrs (er gaat niets naar Nmbrs)', proefrunHtml(r)); }, herstelP);
+      roep('nmbrsProefrun', [id], function (r) {
+        herstelP();
+        infoDialoog('Proefrun Nmbrs (er gaat niets naar Nmbrs)', proefrunHtml(r));
+        roep('detail', [id], function (d) { if ($('detailInhoud').dataset.id === id) toonDetail(d); }, null, true); // knop bijwerken
+      }, herstelP);
       return;
     }
     if (actie === 'nmbrs-aanmaken') {
