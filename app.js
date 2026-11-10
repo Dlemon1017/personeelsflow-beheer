@@ -936,9 +936,10 @@
 
   var CORRECTIE_LABELS = { roepnaam: 'Roepnaam', voornamen: 'Voornamen', tussenvoegsel: 'Tussenvoegsel', achternaam: 'Achternaam',
     straat: 'Straat', huisnummer: 'Huisnummer', toevoeging: 'Toevoeging', postcode: 'Postcode', woonplaats: 'Woonplaats',
-    mobiel: 'Mobiel', noodcontact_naam: 'Noodcontact', noodcontact_relatie: 'Relatie noodcontact', noodcontact_telefoon: 'Telefoon noodcontact' };
+    mobiel: 'Mobiel', noodcontact_naam: 'Noodcontact', noodcontact_relatie: 'Relatie noodcontact', noodcontact_telefoon: 'Telefoon noodcontact',
+    nationaliteit: 'Nationaliteit', geboorteland: 'Geboorteland' };
 
-  /** Venster "Gegevens corrigeren": alleen naam, adres, telefoon en noodcontact (niet BSN, IBAN, loonheffingskorting). */
+  /** Venster "Gegevens corrigeren": naam, adres, telefoon, noodcontact, nationaliteit en geboorteland (niet BSN, IBAN, loonheffingskorting). */
   function corrigeerDialoog(id, huidig) {
     var achter = document.createElement('div');
     achter.className = 'dialoog-achter';
